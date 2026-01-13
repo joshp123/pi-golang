@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -87,6 +89,72 @@ func StartOneShot(options OneShotOptions) (*OneShotClient, error) {
 		return nil, err
 	}
 	return &OneShotClient{Client: client}, nil
+}
+
+func (client *SessionClient) ExportHTML(ctx context.Context, outputPath string) (string, error) {
+	command := RpcCommand{
+		"type": "export_html",
+	}
+	if strings.TrimSpace(outputPath) != "" {
+		command["outputPath"] = outputPath
+	}
+	response, err := client.Send(ctx, command)
+	if err != nil {
+		return "", err
+	}
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(response.Data, &payload); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(payload.Path) == "" {
+		return "", errors.New("export_html returned empty path")
+	}
+	return payload.Path, nil
+}
+
+func (client *SessionClient) ShareSession(ctx context.Context) (ShareResult, error) {
+	ghPath, err := exec.LookPath("gh")
+	if err != nil {
+		return ShareResult{}, errors.New("gh CLI not found; install https://cli.github.com/")
+	}
+	tmpDir, err := os.MkdirTemp("", "pi-golang-session-")
+	if err != nil {
+		return ShareResult{}, err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	exportPath := filepath.Join(tmpDir, "session.html")
+	path, err := client.ExportHTML(ctx, exportPath)
+	if err != nil {
+		return ShareResult{}, err
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, ghPath, "gist", "create", "--public=false", path)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		errText := strings.TrimSpace(stderr.String())
+		if errText == "" {
+			errText = err.Error()
+		}
+		return ShareResult{}, fmt.Errorf("gh gist create failed: %s", errText)
+	}
+
+	gistURL := strings.TrimSpace(stdout.String())
+	if gistURL == "" {
+		return ShareResult{}, errors.New("gh gist create returned empty URL")
+	}
+	parts := strings.Split(strings.TrimRight(gistURL, "/"), "/")
+	gistID := parts[len(parts)-1]
+	if strings.TrimSpace(gistID) == "" {
+		return ShareResult{}, errors.New("failed to parse gist ID")
+	}
+	previewURL := fmt.Sprintf("https://shittycodingagent.ai/session/?%s", gistID)
+	return ShareResult{GistURL: gistURL, GistID: gistID, PreviewURL: previewURL}, nil
 }
 
 func startClient(config startConfig) (*Client, error) {

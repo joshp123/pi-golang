@@ -24,6 +24,10 @@ Hi Josh. Let’s build the clean Go SDK.
 4. **Document**: update `README.md` usage + compatibility note.
 5. **Release**: tag + publish (once versioning is defined).
 
+## Commit rule
+
+- Always run `./scripts/check.sh` before committing.
+
 ## Golden path for new pi versions
 
 1. Update compatibility note in `README.md`.
