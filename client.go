@@ -19,7 +19,6 @@ import (
 var defaultShutdownTimeout = 2 * time.Second
 
 type Client struct {
-	options        Options
 	command        Command
 	process        *exec.Cmd
 	stdin          io.WriteCloser
@@ -33,9 +32,65 @@ type Client struct {
 	closed         chan struct{}
 }
 
-func Start(options Options) (*Client, error) {
-	options = options.withDefaults()
-	config, err := resolveModelConfig(options)
+type SessionClient struct {
+	*Client
+}
+
+type OneShotClient struct {
+	*Client
+}
+
+type startConfig struct {
+	appName      string
+	workDir      string
+	systemPrompt string
+	mode         Mode
+	dragons      DragonsOptions
+	sessionName  string
+	useSession   bool
+}
+
+func StartSession(options SessionOptions) (*SessionClient, error) {
+	normalized, err := normalizeSessionOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	client, err := startClient(startConfig{
+		appName:      normalized.AppName,
+		workDir:      normalized.WorkDir,
+		systemPrompt: normalized.SystemPrompt,
+		mode:         normalized.Mode,
+		dragons:      normalized.Dragons,
+		sessionName:  normalized.SessionName,
+		useSession:   true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SessionClient{Client: client}, nil
+}
+
+func StartOneShot(options OneShotOptions) (*OneShotClient, error) {
+	normalized, err := normalizeOneShotOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	client, err := startClient(startConfig{
+		appName:      normalized.AppName,
+		workDir:      normalized.WorkDir,
+		systemPrompt: normalized.SystemPrompt,
+		mode:         normalized.Mode,
+		dragons:      normalized.Dragons,
+		useSession:   false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &OneShotClient{Client: client}, nil
+}
+
+func startClient(config startConfig) (*Client, error) {
+	modelConfig, err := resolveModelConfig(config.mode, config.dragons)
 	if err != nil {
 		return nil, err
 	}
@@ -44,26 +99,32 @@ func Start(options Options) (*Client, error) {
 		return nil, err
 	}
 
-	env, err := buildEnv(options)
+	env, err := buildEnv(config.appName)
 	if err != nil {
 		return nil, err
 	}
 
 	args := []string{
 		"--mode", "rpc",
-		"--provider", config.provider,
-		"--model", config.model,
-		"--thinking", config.thinking,
-		"--no-session",
+		"--provider", modelConfig.provider,
+		"--model", modelConfig.model,
+		"--thinking", modelConfig.thinking,
 	}
-	if strings.TrimSpace(options.SystemPrompt) != "" {
-		args = append(args, "--system-prompt", options.SystemPrompt)
+	if config.useSession {
+		if strings.TrimSpace(config.sessionName) != "" {
+			args = append(args, "--session", config.sessionName)
+		}
+	} else {
+		args = append(args, "--no-session")
+	}
+	if strings.TrimSpace(config.systemPrompt) != "" {
+		args = append(args, "--system-prompt", config.systemPrompt)
 	}
 
 	cmd := exec.Command(command.Executable, command.WithArgs(args)...)
 	cmd.Env = env
-	if options.WorkDir != "" {
-		cmd.Dir = options.WorkDir
+	if config.workDir != "" {
+		cmd.Dir = config.workDir
 	}
 
 	stdin, err := cmd.StdinPipe()
@@ -80,7 +141,6 @@ func Start(options Options) (*Client, error) {
 	}
 
 	client := &Client{
-		options:     options,
 		command:     command,
 		process:     cmd,
 		stdin:       stdin,

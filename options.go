@@ -32,7 +32,16 @@ type DragonsOptions struct {
 	Thinking string
 }
 
-type Options struct {
+type SessionOptions struct {
+	AppName      string
+	WorkDir      string
+	SystemPrompt string
+	Mode         Mode
+	Dragons      DragonsOptions
+	SessionName  string
+}
+
+type OneShotOptions struct {
 	AppName      string
 	WorkDir      string
 	SystemPrompt string
@@ -40,44 +49,74 @@ type Options struct {
 	Dragons      DragonsOptions
 }
 
-func DefaultOptions() Options {
-	return Options{Mode: ModeSmart}
+func DefaultSessionOptions() SessionOptions {
+	return SessionOptions{Mode: ModeSmart}
 }
 
-func (options Options) withDefaults() Options {
+func DefaultOneShotOptions() OneShotOptions {
+	return OneShotOptions{Mode: ModeSmart}
+}
+
+func normalizeSessionOptions(options SessionOptions) (SessionOptions, error) {
 	if options.AppName == "" {
 		options.AppName = "pi-golang"
 	}
 	if options.Mode == "" {
 		options.Mode = ModeSmart
 	}
-	return options
+	if err := validateMode(options.Mode, options.Dragons); err != nil {
+		return options, err
+	}
+	options.Dragons = trimDragons(options.Dragons)
+	options.SessionName = strings.TrimSpace(options.SessionName)
+	return options, nil
 }
 
-func (options Options) validate() error {
-	switch options.Mode {
+func normalizeOneShotOptions(options OneShotOptions) (OneShotOptions, error) {
+	if options.AppName == "" {
+		options.AppName = "pi-golang"
+	}
+	if options.Mode == "" {
+		options.Mode = ModeSmart
+	}
+	if err := validateMode(options.Mode, options.Dragons); err != nil {
+		return options, err
+	}
+	options.Dragons = trimDragons(options.Dragons)
+	return options, nil
+}
+
+func validateMode(mode Mode, dragons DragonsOptions) error {
+	switch mode {
 	case ModeSmart, ModeDumb, ModeFast, ModeCoding, ModeDragons:
 	default:
-		return fmt.Errorf("invalid mode %q", options.Mode)
+		return fmt.Errorf("invalid mode %q", mode)
 	}
 
-	if options.Mode != ModeDragons {
-		if strings.TrimSpace(options.Dragons.Provider) != "" ||
-			strings.TrimSpace(options.Dragons.Model) != "" ||
-			strings.TrimSpace(options.Dragons.Thinking) != "" {
+	if mode != ModeDragons {
+		if strings.TrimSpace(dragons.Provider) != "" ||
+			strings.TrimSpace(dragons.Model) != "" ||
+			strings.TrimSpace(dragons.Thinking) != "" {
 			return fmt.Errorf("dragons options require mode %q", ModeDragons)
 		}
 		return nil
 	}
 
-	if strings.TrimSpace(options.Dragons.Provider) == "" {
+	if strings.TrimSpace(dragons.Provider) == "" {
 		return fmt.Errorf("dragons provider is required")
 	}
-	if strings.TrimSpace(options.Dragons.Model) == "" {
+	if strings.TrimSpace(dragons.Model) == "" {
 		return fmt.Errorf("dragons model is required")
 	}
-	if strings.TrimSpace(options.Dragons.Thinking) == "" {
+	if strings.TrimSpace(dragons.Thinking) == "" {
 		return fmt.Errorf("dragons thinking is required")
 	}
 	return nil
+}
+
+func trimDragons(dragons DragonsOptions) DragonsOptions {
+	dragons.Provider = strings.TrimSpace(dragons.Provider)
+	dragons.Model = strings.TrimSpace(dragons.Model)
+	dragons.Thinking = strings.TrimSpace(dragons.Thinking)
+	return dragons
 }
