@@ -2,7 +2,7 @@
 
 Go SDK for the pi coding agent with a clean, managed RPC process.
 
-Thanks to Mario Zechner and the excellent pi project.
+Thanks to Mario Zechner and the excellent pi project: [pi-mono](https://github.com/badlogic/pi-mono).
 
 ## Architecture
 
