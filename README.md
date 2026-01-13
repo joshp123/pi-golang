@@ -54,6 +54,34 @@ fmt.Println(result.Text)
 - `coding`: GPT-5.2 Codex + high thinking
 - `dragons`: explicit `provider/model/thinking` (here be dragons)
 
+### Mode examples
+
+Pick a mode (see `examples/basic/main.go` for the minimal path):
+
+```go
+opts := pi.DefaultOptions()
+opts.Mode = pi.ModeFast
+
+client, err := pi.Start(opts)
+if err != nil {
+    // handle
+}
+
+defer client.Close()
+```
+
+Dragons mode (explicit provider/model/thinking):
+
+```go
+opts := pi.DefaultOptions()
+opts.Mode = pi.ModeDragons
+opts.Dragons = pi.DragonsOptions{
+    Provider: "anthropic",
+    Model:    "claude-opus-4-5",
+    Thinking: "high",
+}
+```
+
 ## Wiring guide
 
 **Recommended pattern (server):** create one client per process and reuse it.

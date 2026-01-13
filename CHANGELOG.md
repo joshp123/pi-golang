@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.0.2
 
 - Simplify options: `AppName` + `SystemPrompt`, opinionated modes + dragons escape hatch
 
