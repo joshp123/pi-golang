@@ -43,6 +43,34 @@ if err != nil {
 fmt.Println(result.Text)
 ```
 
+## Wiring guide
+
+**Recommended pattern (server):** create one client per process and reuse it.
+
+```go
+opts := pi.DefaultOptions()
+opts.Args = []string{"--no-session"}
+opts.AgentDir = filepath.Join(os.Getenv("HOME"), ".lawbot", "pi-agent")
+
+client, err := pi.Start(opts)
+if err != nil {
+    // handle
+}
+
+defer client.Close()
+
+res, err := client.Run(ctx, prompt)
+if err != nil {
+    // handle
+}
+fmt.Println(res.Text)
+```
+
+Notes:
+- Requires `pi` CLI + auth configured (`~/.pi/agent/auth.json` or env vars).
+- `AgentDir` isolates config/extensions from other pi users.
+- Use `Subscribe()` for streaming events; wait for `agent_end` for results.
+
 ## Pre-commit checks
 
 Run:
