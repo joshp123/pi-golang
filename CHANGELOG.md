@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Simplify options: `AppName` + `SystemPrompt`, opinionated modes + dragons escape hatch
+
 ## v0.0.1
 
 - RPC-based Go client with managed `pi --mode rpc` process

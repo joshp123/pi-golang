@@ -18,6 +18,25 @@ var DefaultEnvAllowlist = []string{
 	"SHELL",
 	"TMPDIR",
 	"TZ",
+	"ANTHROPIC_API_KEY",
+	"ANTHROPIC_OAUTH_TOKEN",
+	"ANTHROPIC_TOKEN_FILE",
+	"OPENAI_API_KEY",
+	"GEMINI_API_KEY",
+	"MISTRAL_API_KEY",
+	"GROQ_API_KEY",
+	"CEREBRAS_API_KEY",
+	"XAI_API_KEY",
+	"OPENROUTER_API_KEY",
+	"ZAI_API_KEY",
+	"MINIMAX_API_KEY",
+	"GOOGLE_CLOUD_PROJECT",
+	"GOOGLE_CLOUD_PROJECT_ID",
+	"AWS_PROFILE",
+	"AWS_ACCESS_KEY_ID",
+	"AWS_SECRET_ACCESS_KEY",
+	"AWS_BEARER_TOKEN_BEDROCK",
+	"AWS_REGION",
 }
 
 var DefaultEnvAllowPrefixes = []string{
@@ -26,17 +45,8 @@ var DefaultEnvAllowPrefixes = []string{
 }
 
 func buildEnv(options Options) ([]string, error) {
-	allowlist := options.EnvAllowlist
-	if allowlist == nil {
-		allowlist = DefaultEnvAllowlist
-	}
-	allowPrefixes := options.EnvAllowPrefixes
-	if allowPrefixes == nil {
-		allowPrefixes = DefaultEnvAllowPrefixes
-	}
-
 	allowed := map[string]bool{}
-	for _, key := range allowlist {
+	for _, key := range DefaultEnvAllowlist {
 		allowed[key] = true
 	}
 
@@ -46,7 +56,7 @@ func buildEnv(options Options) ([]string, error) {
 		if !ok {
 			continue
 		}
-		if allowed[key] || hasAllowedPrefix(key, allowPrefixes) {
+		if allowed[key] || hasAllowedPrefix(key, DefaultEnvAllowPrefixes) {
 			result[key] = value
 		}
 	}
@@ -56,10 +66,6 @@ func buildEnv(options Options) ([]string, error) {
 		return nil, err
 	}
 	result["PI_CODING_AGENT_DIR"] = agentDir
-
-	for key, value := range options.Env {
-		result[key] = value
-	}
 
 	return mapToEnvSlice(result), nil
 }
@@ -74,28 +80,24 @@ func hasAllowedPrefix(key string, prefixes []string) bool {
 }
 
 func resolveAgentDir(options Options) (string, error) {
-	if options.AgentDir != "" {
-		if err := os.MkdirAll(options.AgentDir, 0o700); err != nil {
-			return "", err
-		}
-		return options.AgentDir, nil
-	}
-
+	options = options.withDefaults()
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	base := filepath.Join(home, ".pi-golang", "agent")
-	if err := os.MkdirAll(base, 0o700); err != nil {
+	name := strings.TrimPrefix(options.AppName, ".")
+	root := filepath.Join(home, "."+name)
+	agentDir := filepath.Join(root, "pi-agent")
+	if err := os.MkdirAll(agentDir, 0o700); err != nil {
 		return "", err
 	}
 
-	if err := seedAuthFiles(base); err != nil {
+	if err := seedAuthFiles(agentDir); err != nil {
 		return "", err
 	}
 
-	return base, nil
+	return agentDir, nil
 }
 
 func seedAuthFiles(agentDir string) error {

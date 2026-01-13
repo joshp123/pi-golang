@@ -2,6 +2,8 @@
 
 Go SDK for the pi coding agent with a clean, managed RPC process.
 
+Thanks to Mario Zechner and the excellent pi project.
+
 ## Architecture
 
 pi-golang is a thin Go wrapper around pi’s **RPC mode**. It does not re-implement
@@ -14,6 +16,7 @@ via JSON lines on stdin/stdout.
 - **RPC transport**: request/response routing with IDs; event stream channel.
 - **Event helpers**: extract assistant text + usage from `agent_end` events.
 - **Env isolation**: allowlisted env + isolated `PI_CODING_AGENT_DIR`.
+- **Mode router**: opinionated presets + explicit dragons mode.
 
 ## Why RPC (and not Go reimplementation)
 - pi’s “batteries” live in Node: `pi-ai`, `pi-agent-core`, `pi-coding-agent`.
@@ -43,14 +46,23 @@ if err != nil {
 fmt.Println(result.Text)
 ```
 
+## Modes (opinionated defaults)
+
+- `smart`: Opus 4.5 + high thinking
+- `dumb`: Opus 4.5 + low thinking
+- `fast`: Haiku 4.5 + low thinking
+- `coding`: GPT-5.2 Codex + high thinking
+- `dragons`: explicit `provider/model/thinking` (here be dragons)
+
 ## Wiring guide
 
 **Recommended pattern (server):** create one client per process and reuse it.
 
 ```go
 opts := pi.DefaultOptions()
-opts.Args = []string{"--no-session"}
-opts.AgentDir = filepath.Join(os.Getenv("HOME"), ".lawbot", "pi-agent")
+opts.AppName = "lawbot" // stores under ~/.lawbot/pi-agent
+opts.Mode = pi.ModeSmart
+opts.SystemPrompt = "..." // optional
 
 client, err := pi.Start(opts)
 if err != nil {
@@ -68,7 +80,9 @@ fmt.Println(res.Text)
 
 Notes:
 - Requires `pi` CLI + auth configured (`~/.pi/agent/auth.json` or env vars).
-- `AgentDir` isolates config/extensions from other pi users.
+- `AppName` isolates config/extensions under `~/.<app>/pi-agent`.
+- Always runs `--no-session`.
+- `ModeDragons` passes `provider/model/thinking` straight to pi (here be dragons).
 - Use `Subscribe()` for streaming events; wait for `agent_end` for results.
 
 ## Pre-commit checks

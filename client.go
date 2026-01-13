@@ -35,7 +35,11 @@ type Client struct {
 
 func Start(options Options) (*Client, error) {
 	options = options.withDefaults()
-	command, err := ResolveCommand(options)
+	config, err := resolveModelConfig(options)
+	if err != nil {
+		return nil, err
+	}
+	command, err := ResolveCommand()
 	if err != nil {
 		return nil, err
 	}
@@ -45,18 +49,15 @@ func Start(options Options) (*Client, error) {
 		return nil, err
 	}
 
-	args := []string{"--mode", "rpc"}
-	if options.Provider != "" {
-		args = append(args, "--provider", options.Provider)
+	args := []string{
+		"--mode", "rpc",
+		"--provider", config.provider,
+		"--model", config.model,
+		"--thinking", config.thinking,
+		"--no-session",
 	}
-	if options.Model != "" {
-		args = append(args, "--model", options.Model)
-	}
-	if options.Thinking != "" {
-		args = append(args, "--thinking", options.Thinking)
-	}
-	if len(options.Args) > 0 {
-		args = append(args, options.Args...)
+	if strings.TrimSpace(options.SystemPrompt) != "" {
+		args = append(args, "--system-prompt", options.SystemPrompt)
 	}
 
 	cmd := exec.Command(command.Executable, command.WithArgs(args)...)

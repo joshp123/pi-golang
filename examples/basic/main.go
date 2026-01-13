@@ -9,7 +9,9 @@ import (
 )
 
 func main() {
-	client, err := pi.Start(pi.DefaultOptions())
+	opts := pi.DefaultOptions()
+	opts.Mode = pi.ModeSmart
+	client, err := pi.Start(opts)
 	if err != nil {
 		log.Fatalf("start: %v", err)
 	}
