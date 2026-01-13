@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.0.4
+
+- Add `ShareSession` to export and gist session HTML
+
 ## v0.0.3
 
 - Split clients into `SessionClient` and `OneShotClient` with explicit sessions

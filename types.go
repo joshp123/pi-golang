@@ -50,3 +50,9 @@ type RunResult struct {
 	Text  string
 	Usage *Usage
 }
+
+type ShareResult struct {
+	GistURL    string
+	GistID     string
+	PreviewURL string
+}

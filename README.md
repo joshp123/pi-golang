@@ -64,6 +64,10 @@ if err != nil {
 fmt.Println(result.Text)
 ```
 
+## Build session
+
+Manually sanitized session export used to build pi-golang: [session log](https://shittycodingagent.ai/session/?d41b8b0ed9228c5652cd9089f11d62cb).
+
 ## Modes (opinionated defaults)
 
 - `smart`: Opus 4.5 + high thinking
@@ -147,6 +151,20 @@ Notes:
 - `SessionName` is passed to `--session` when set.
 - `ModeDragons` passes `provider/model/thinking` straight to pi (here be dragons).
 - Use `Subscribe()` for streaming events; wait for `agent_end` for results.
+
+## Share session
+
+Create a secret GitHub gist from the current session (requires `gh` auth):
+
+```go
+result, err := client.ShareSession(context.Background())
+if err != nil {
+    // handle
+}
+fmt.Println(result.GistURL)
+```
+
+`ShareSession` exports the full session HTML. Sanitize before sharing if needed.
 
 ## Pre-commit checks
 
