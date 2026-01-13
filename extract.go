@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+func debugExtract(format string, args ...any) {
+	if Debug {
+		debugf("extract: "+format, args...)
+	}
+}
+
 type agentEndPayload struct {
 	Messages []agentMessage `json:"messages"`
 }
@@ -23,23 +29,30 @@ type contentBlock struct {
 }
 
 func extractRunResult(event Event) (RunResult, error) {
+	debugExtract("parsing agent_end payload (%d bytes)", len(event.Raw))
 	var payload agentEndPayload
 	if err := json.Unmarshal(event.Raw, &payload); err != nil {
+		debugExtract("unmarshal error: %v", err)
 		return RunResult{}, err
 	}
+	debugExtract("found %d messages", len(payload.Messages))
 
 	for index := len(payload.Messages) - 1; index >= 0; index-- {
 		message := payload.Messages[index]
+		debugExtract("message[%d] role=%s", index, message.Role)
 		if message.Role != "assistant" {
 			continue
 		}
 		text, err := extractAssistantText(message.Content)
 		if err != nil {
+			debugExtract("extractAssistantText error: %v", err)
 			return RunResult{}, err
 		}
+		debugExtract("extracted text (%d chars), returning", len(text))
 		return RunResult{Text: text, Usage: message.Usage}, nil
 	}
 
+	debugExtract("no assistant message found")
 	return RunResult{}, errors.New("assistant message not found in agent_end")
 }
 

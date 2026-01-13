@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,15 @@ import (
 )
 
 var defaultShutdownTimeout = 2 * time.Second
+
+// Debug enables verbose logging when PI_DEBUG=1
+var Debug = os.Getenv("PI_DEBUG") == "1"
+
+func debugf(format string, args ...any) {
+	if Debug {
+		log.Printf("[pi-golang] "+format, args...)
+	}
+}
 
 type Client struct {
 	command        Command
@@ -228,16 +238,21 @@ func startClient(config startConfig) (*Client, error) {
 }
 
 func (client *Client) Close() error {
+	debugf("Close: starting")
 	var closeErr error
 	client.closeOnce.Do(func() {
+		debugf("Close: closing closed channel")
 		close(client.closed)
+		debugf("Close: closing stdin")
 		if client.stdin != nil {
 			_ = client.stdin.Close()
 		}
+		debugf("Close: sending SIGTERM")
 		if client.process != nil && client.process.Process != nil {
 			_ = client.process.Process.Signal(syscall.SIGTERM)
 		}
 
+		debugf("Close: waiting for process to exit (timeout=%v)", defaultShutdownTimeout)
 		done := make(chan struct{})
 		go func() {
 			if client.process != nil {
@@ -248,13 +263,18 @@ func (client *Client) Close() error {
 
 		select {
 		case <-done:
+			debugf("Close: process exited cleanly")
 		case <-time.After(defaultShutdownTimeout):
+			debugf("Close: timeout, killing process")
 			if client.process != nil && client.process.Process != nil {
 				_ = client.process.Process.Kill()
 			}
 		}
 
+		debugf("Close: cleaning up subscribers and pending")
+		debugf("Close: acquiring lock...")
 		client.lock.Lock()
+		debugf("Close: lock acquired")
 		for ch := range client.subscribers {
 			close(ch)
 		}
@@ -264,8 +284,10 @@ func (client *Client) Close() error {
 		}
 		client.pending = map[string]chan Response{}
 		client.lock.Unlock()
+		debugf("Close: done")
 	})
 
+	debugf("Close: returning")
 	return closeErr
 }
 
@@ -280,13 +302,24 @@ func (client *Client) Subscribe(buffer int) (<-chan Event, func()) {
 	ch := make(chan Event, buffer)
 	client.lock.Lock()
 	client.subscribers[ch] = struct{}{}
+	numSubs := len(client.subscribers)
 	client.lock.Unlock()
+	debugf("Subscribe: buffer=%d, total_subscribers=%d", buffer, numSubs)
 
+	var cancelled bool
 	return ch, func() {
 		client.lock.Lock()
+		if cancelled {
+			client.lock.Unlock()
+			debugf("Unsubscribe: already cancelled, skipping")
+			return
+		}
+		cancelled = true
 		delete(client.subscribers, ch)
 		close(ch)
+		numSubs := len(client.subscribers)
 		client.lock.Unlock()
+		debugf("Unsubscribe: remaining_subscribers=%d", numSubs)
 	}
 }
 
@@ -356,23 +389,33 @@ func (client *Client) Prompt(ctx context.Context, message string, images ...Imag
 }
 
 func (client *Client) Run(ctx context.Context, message string) (RunResult, error) {
+	// Subscribe BEFORE sending prompt to avoid race condition where
+	// agent_end is broadcast before we're listening
+	debugf("Run: subscribing before prompt")
+	events, cancel := client.Subscribe(256)
+	defer cancel()
+
+	debugf("Run: sending prompt")
 	if err := client.Prompt(ctx, message); err != nil {
 		return RunResult{}, err
 	}
 
-	events, cancel := client.Subscribe(8)
-	defer cancel()
-
+	debugf("Run: waiting for agent_end")
 	for {
 		select {
 		case <-ctx.Done():
+			debugf("Run: context cancelled")
 			return RunResult{}, ctx.Err()
 		case event, ok := <-events:
 			if !ok {
+				debugf("Run: event stream closed")
 				return RunResult{}, errors.New("event stream closed")
 			}
 			if event.Type == "agent_end" {
-				return extractRunResult(event)
+				debugf("Run: received agent_end, extracting result")
+				result, err := extractRunResult(event)
+				debugf("Run: extractRunResult returned, text=%d chars, err=%v", len(result.Text), err)
+				return result, err
 			}
 		}
 	}
@@ -398,14 +441,18 @@ func (client *Client) captureStderr(stderr io.Reader) {
 }
 
 func (client *Client) readStdout(stdout io.Reader) {
+	debugf("readStdout: started")
 	reader := bufio.NewReader(stdout)
 	for {
 		line, err := reader.ReadBytes('\n')
 		line = bytes.TrimSpace(line)
 		if len(line) > 0 {
+			debugf("readStdout: processing line (%d bytes)", len(line))
 			client.handleLine(line)
+			debugf("readStdout: line processed")
 		}
 		if err != nil {
+			debugf("readStdout: exiting due to err=%v", err)
 			return
 		}
 	}
@@ -427,7 +474,9 @@ func (client *Client) handleLine(line []byte) {
 			client.broadcastEvent(Event{Type: "response_parse_error", Raw: append([]byte{}, line...)})
 			return
 		}
+		debugf("handleLine: acquiring lock for response id=%s", response.ID)
 		client.lock.Lock()
+		debugf("handleLine: lock acquired")
 		responseChan := client.pending[response.ID]
 		delete(client.pending, response.ID)
 		client.lock.Unlock()
@@ -442,12 +491,38 @@ func (client *Client) handleLine(line []byte) {
 }
 
 func (client *Client) broadcastEvent(event Event) {
+	debugf("broadcastEvent: acquiring lock for type=%s", event.Type)
 	client.lock.Lock()
+	debugf("broadcastEvent: lock acquired")
+	numSubs := len(client.subscribers)
+	if event.Type == "agent_end" {
+		debugf("broadcastEvent agent_end to %d subscribers", numSubs)
+	}
 	for ch := range client.subscribers {
+		if event.Type == "agent_end" {
+			select {
+			case ch <- event:
+				debugf("agent_end delivered to subscriber (cap=%d, len=%d)", cap(ch), len(ch))
+			default:
+				debugf("agent_end BLOCKED, trying to drop oldest (cap=%d, len=%d)", cap(ch), len(ch))
+				select {
+				case <-ch:
+				default:
+				}
+				select {
+				case ch <- event:
+					debugf("agent_end delivered after drop")
+				default:
+					debugf("agent_end FAILED even after drop")
+				}
+			}
+			continue
+		}
 		select {
 		case ch <- event:
 		default:
 		}
 	}
+	debugf("broadcastEvent: releasing lock")
 	client.lock.Unlock()
 }
