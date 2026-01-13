@@ -9,9 +9,9 @@ import (
 )
 
 func main() {
-	opts := pi.DefaultOptions()
+	opts := pi.DefaultOneShotOptions()
 	opts.Mode = pi.ModeSmart
-	client, err := pi.Start(opts)
+	client, err := pi.StartOneShot(opts)
 	if err != nil {
 		log.Fatalf("start: %v", err)
 	}

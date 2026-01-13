@@ -44,7 +44,7 @@ var DefaultEnvAllowPrefixes = []string{
 	"LC_",
 }
 
-func buildEnv(options Options) ([]string, error) {
+func buildEnv(appName string) ([]string, error) {
 	allowed := map[string]bool{}
 	for _, key := range DefaultEnvAllowlist {
 		allowed[key] = true
@@ -61,7 +61,7 @@ func buildEnv(options Options) ([]string, error) {
 		}
 	}
 
-	agentDir, err := resolveAgentDir(options)
+	agentDir, err := resolveAgentDir(appName)
 	if err != nil {
 		return nil, err
 	}
@@ -79,14 +79,16 @@ func hasAllowedPrefix(key string, prefixes []string) bool {
 	return false
 }
 
-func resolveAgentDir(options Options) (string, error) {
-	options = options.withDefaults()
+func resolveAgentDir(appName string) (string, error) {
+	if strings.TrimSpace(appName) == "" {
+		appName = "pi-golang"
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	name := strings.TrimPrefix(options.AppName, ".")
+	name := strings.TrimPrefix(appName, ".")
 	root := filepath.Join(home, "."+name)
 	agentDir := filepath.Join(root, "pi-agent")
 	if err := os.MkdirAll(agentDir, 0o700); err != nil {

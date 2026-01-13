@@ -30,10 +30,28 @@ via JSON lines on stdin/stdout.
 - **Goal**: pi-golang provides a **clean Go surface** with isolated env +
   long‑lived process management — no per‑call shelling and no env pollution.
 
-## Quick start
+## Quick start (session)
 
 ```go
-client, err := pi.Start(pi.Options{})
+opts := pi.DefaultSessionOptions()
+client, err := pi.StartSession(opts)
+if err != nil {
+    // handle
+}
+defer client.Close()
+
+result, err := client.Run(context.Background(), "Summarize this.")
+if err != nil {
+    // handle
+}
+fmt.Println(result.Text)
+```
+
+## Quick start (one-shot)
+
+```go
+opts := pi.DefaultOneShotOptions()
+client, err := pi.StartOneShot(opts)
 if err != nil {
     // handle
 }
@@ -52,17 +70,17 @@ fmt.Println(result.Text)
 - `dumb`: Opus 4.5 + low thinking
 - `fast`: Haiku 4.5 + low thinking
 - `coding`: GPT-5.2 Codex + high thinking
-- `dragons`: explicit `provider/model/thinking` (here be dragons)
+- `dragons`: explicit `provider/model/thinking` (any pi-supported provider; here be dragons)
 
 ### Mode examples
 
-Pick a mode (see `examples/basic/main.go` for the minimal path):
+Modes apply to both session and one-shot clients.
 
 ```go
-opts := pi.DefaultOptions()
+opts := pi.DefaultSessionOptions()
 opts.Mode = pi.ModeFast
 
-client, err := pi.Start(opts)
+client, err := pi.StartSession(opts)
 if err != nil {
     // handle
 }
@@ -73,7 +91,7 @@ defer client.Close()
 Dragons mode (explicit provider/model/thinking):
 
 ```go
-opts := pi.DefaultOptions()
+opts := pi.DefaultSessionOptions()
 opts.Mode = pi.ModeDragons
 opts.Dragons = pi.DragonsOptions{
     Provider: "anthropic",
@@ -87,12 +105,13 @@ opts.Dragons = pi.DragonsOptions{
 **Recommended pattern (server):** create one client per process and reuse it.
 
 ```go
-opts := pi.DefaultOptions()
+opts := pi.DefaultSessionOptions()
 opts.AppName = "lawbot" // stores under ~/.lawbot/pi-agent
 opts.Mode = pi.ModeSmart
+opts.SessionName = "lawbot-main" // optional stable session name
 opts.SystemPrompt = "..." // optional
 
-client, err := pi.Start(opts)
+client, err := pi.StartSession(opts)
 if err != nil {
     // handle
 }
@@ -106,10 +125,26 @@ if err != nil {
 fmt.Println(res.Text)
 ```
 
+One-shot (batch) client:
+
+```go
+opts := pi.DefaultOneShotOptions()
+opts.AppName = "lawbot"
+opts.Mode = pi.ModeFast
+
+client, err := pi.StartOneShot(opts)
+if err != nil {
+    // handle
+}
+
+defer client.Close()
+```
+
 Notes:
 - Requires `pi` CLI + auth configured (`~/.pi/agent/auth.json` or env vars).
 - `AppName` isolates config/extensions under `~/.<app>/pi-agent`.
-- Always runs `--no-session`.
+- `StartSession` keeps sessions; `StartOneShot` adds `--no-session`.
+- `SessionName` is passed to `--session` when set.
 - `ModeDragons` passes `provider/model/thinking` straight to pi (here be dragons).
 - Use `Subscribe()` for streaming events; wait for `agent_end` for results.
 

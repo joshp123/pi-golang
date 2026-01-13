@@ -3,7 +3,7 @@ package pi
 import "testing"
 
 func TestResolveModelConfigSmart(t *testing.T) {
-	cfg, err := resolveModelConfig(Options{Mode: ModeSmart})
+	cfg, err := resolveModelConfig(ModeSmart, DragonsOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -11,7 +11,7 @@ func TestResolveModelConfigSmart(t *testing.T) {
 }
 
 func TestResolveModelConfigDumb(t *testing.T) {
-	cfg, err := resolveModelConfig(Options{Mode: ModeDumb})
+	cfg, err := resolveModelConfig(ModeDumb, DragonsOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestResolveModelConfigDumb(t *testing.T) {
 }
 
 func TestResolveModelConfigFast(t *testing.T) {
-	cfg, err := resolveModelConfig(Options{Mode: ModeFast})
+	cfg, err := resolveModelConfig(ModeFast, DragonsOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -27,7 +27,7 @@ func TestResolveModelConfigFast(t *testing.T) {
 }
 
 func TestResolveModelConfigCoding(t *testing.T) {
-	cfg, err := resolveModelConfig(Options{Mode: ModeCoding})
+	cfg, err := resolveModelConfig(ModeCoding, DragonsOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -35,11 +35,11 @@ func TestResolveModelConfigCoding(t *testing.T) {
 }
 
 func TestResolveModelConfigDragons(t *testing.T) {
-	cfg, err := resolveModelConfig(Options{Mode: ModeDragons, Dragons: DragonsOptions{
+	cfg, err := resolveModelConfig(ModeDragons, DragonsOptions{
 		Provider: "anthropic",
 		Model:    "claude-opus-4-5",
 		Thinking: "high",
-	}})
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -47,24 +47,24 @@ func TestResolveModelConfigDragons(t *testing.T) {
 }
 
 func TestResolveModelConfigDragonsValidation(t *testing.T) {
-	if _, err := resolveModelConfig(Options{Mode: ModeDragons}); err == nil {
+	if _, err := resolveModelConfig(ModeDragons, DragonsOptions{}); err == nil {
 		t.Fatalf("expected error for missing dragons values")
 	}
 }
 
 func TestResolveModelConfigDragonsMisuse(t *testing.T) {
-	_, err := resolveModelConfig(Options{Mode: ModeSmart, Dragons: DragonsOptions{
+	_, err := resolveModelConfig(ModeSmart, DragonsOptions{
 		Provider: "anthropic",
 		Model:    "claude-opus-4-5",
 		Thinking: "high",
-	}})
+	})
 	if err == nil {
 		t.Fatalf("expected error for dragons values without dragons mode")
 	}
 }
 
 func TestResolveModelConfigInvalidMode(t *testing.T) {
-	if _, err := resolveModelConfig(Options{Mode: Mode("nope")}); err == nil {
+	if _, err := resolveModelConfig(Mode("nope"), DragonsOptions{}); err == nil {
 		t.Fatalf("expected error for invalid mode")
 	}
 }

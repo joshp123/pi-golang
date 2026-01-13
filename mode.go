@@ -1,20 +1,18 @@
 package pi
 
-import "strings"
-
 type modelConfig struct {
 	provider string
 	model    string
 	thinking string
 }
 
-func resolveModelConfig(options Options) (modelConfig, error) {
-	options = options.withDefaults()
-	if err := options.validate(); err != nil {
+func resolveModelConfig(mode Mode, dragons DragonsOptions) (modelConfig, error) {
+	if err := validateMode(mode, dragons); err != nil {
 		return modelConfig{}, err
 	}
+	dragons = trimDragons(dragons)
 
-	switch options.Mode {
+	switch mode {
 	case ModeSmart:
 		return modelConfig{
 			provider: DefaultProvider,
@@ -41,11 +39,11 @@ func resolveModelConfig(options Options) (modelConfig, error) {
 		}, nil
 	case ModeDragons:
 		return modelConfig{
-			provider: strings.TrimSpace(options.Dragons.Provider),
-			model:    strings.TrimSpace(options.Dragons.Model),
-			thinking: strings.TrimSpace(options.Dragons.Thinking),
+			provider: dragons.Provider,
+			model:    dragons.Model,
+			thinking: dragons.Thinking,
 		}, nil
 	default:
-		return modelConfig{}, options.validate()
+		return modelConfig{}, validateMode(mode, dragons)
 	}
 }

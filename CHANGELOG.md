@@ -1,8 +1,14 @@
 # Changelog
 
+## v0.0.3
+
+- Split clients into `SessionClient` and `OneShotClient` with explicit sessions
+- Add `SessionOptions`/`OneShotOptions` and `SessionName` support
+
 ## v0.0.2
 
-- Simplify options: `AppName` + `SystemPrompt`, opinionated modes + dragons escape hatch
+- Add `SessionClient`/`OneShotClient` with explicit session behavior
+- Keep opinionated modes + dragons escape hatch
 
 ## v0.0.1
 
