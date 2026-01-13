@@ -20,54 +20,37 @@ func (command Command) WithArgs(extra []string) []string {
 	return args
 }
 
-func ResolveCommand(options Options) (Command, error) {
-	options = options.withDefaults()
-	if options.PiPath != "" {
-		return commandFromPath(options, options.PiPath)
-	}
-
+func ResolveCommand() (Command, error) {
 	piPath, err := exec.LookPath("pi")
-	if err == nil {
-		cmd, ok := commandFromPiWrapper(options, piPath)
-		if ok {
-			return cmd, nil
-		}
+	if err != nil {
+		return Command{}, errors.New("pi CLI not found; install @mariozechner/pi-coding-agent")
 	}
-
-	return Command{}, errors.New("pi CLI not found; set Options.PiPath or install pi-coding-agent")
-}
-
-func commandFromPath(options Options, piPath string) (Command, error) {
-	if strings.HasSuffix(piPath, ".js") {
-		return Command{Executable: resolveNode(options), Args: []string{piPath}}, nil
+	if cmd, ok := commandFromPiWrapper(piPath); ok {
+		return cmd, nil
 	}
 	return Command{Executable: piPath}, nil
 }
 
-func commandFromPiWrapper(options Options, piPath string) (Command, bool) {
-	if resolved := resolveCliFromWrapper(options, piPath); resolved.Executable != "" {
+func commandFromPiWrapper(piPath string) (Command, bool) {
+	if resolved := resolveCliFromWrapper(piPath); resolved.Executable != "" {
 		return resolved, true
 	}
 
 	root := filepath.Dir(filepath.Dir(piPath))
 	candidate := filepath.Join(root, "lib", "node_modules", "@mariozechner", "pi-coding-agent", "dist", "cli.js")
 	if fileExists(candidate) {
-		return Command{Executable: resolveNode(options), Args: []string{candidate}}, true
+		return Command{Executable: "node", Args: []string{candidate}}, true
 	}
 
 	fallback := filepath.Join(root, "lib", "node_modules", "pi-monorepo", "dist", "cli.js")
 	if fileExists(fallback) {
-		return Command{Executable: resolveNode(options), Args: []string{fallback}}, true
-	}
-
-	if fileExists(piPath) {
-		return Command{Executable: piPath}, true
+		return Command{Executable: "node", Args: []string{fallback}}, true
 	}
 
 	return Command{}, false
 }
 
-func resolveCliFromWrapper(options Options, piPath string) Command {
+func resolveCliFromWrapper(piPath string) Command {
 	file, err := os.Open(piPath)
 	if err != nil {
 		return Command{}
@@ -94,17 +77,10 @@ func resolveCliFromWrapper(options Options, piPath string) Command {
 		}
 		if cliPath != "" {
 			if nodePath == "" {
-				nodePath = resolveNode(options)
+				nodePath = "node"
 			}
 			return Command{Executable: nodePath, Args: []string{cliPath}}
 		}
 	}
 	return Command{}
-}
-
-func resolveNode(options Options) string {
-	if options.NodePath != "" {
-		return options.NodePath
-	}
-	return "node"
 }
