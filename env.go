@@ -22,6 +22,7 @@ var DefaultEnvAllowlist = []string{
 	"ANTHROPIC_OAUTH_TOKEN",
 	"ANTHROPIC_TOKEN_FILE",
 	"OPENAI_API_KEY",
+	"PI_CODING_AGENT_DIR",
 	"GEMINI_API_KEY",
 	"MISTRAL_API_KEY",
 	"GROQ_API_KEY",
@@ -61,11 +62,14 @@ func buildEnv(appName string) ([]string, error) {
 		}
 	}
 
-	agentDir, err := resolveAgentDir(appName)
-	if err != nil {
-		return nil, err
+	// Only set PI_CODING_AGENT_DIR if not already in environment
+	if result["PI_CODING_AGENT_DIR"] == "" {
+		agentDir, err := resolveAgentDir(appName)
+		if err != nil {
+			return nil, err
+		}
+		result["PI_CODING_AGENT_DIR"] = agentDir
 	}
-	result["PI_CODING_AGENT_DIR"] = agentDir
 
 	return mapToEnvSlice(result), nil
 }
