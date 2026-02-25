@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.0.10
+
+- Extract generic runtime primitives to `internal/runtime/` (`PendingRegistry`, `Queue`) and keep root wrappers thin
+- Add `RunDetailed` battery helper to return terminal outcome plus typed compaction/retry signals
+- Add typed decoders for `auto_compaction_start`, `auto_retry_start`, and `auto_retry_end`
+- Preserve strict overflow stance: no copied provider-regex classifier in core until upstream RPC provides typed reason fields
+
 ## v0.0.9
 
 - Add canonical `DecodeTerminalOutcome` for `agent_end` payloads (`completed|failed|aborted` + text/stopReason/error/usage)

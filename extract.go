@@ -73,6 +73,20 @@ func DecodeMessageUpdate(raw json.RawMessage) (MessageUpdateEvent, error) {
 	}, nil
 }
 
+func DecodeAutoCompactionStart(raw json.RawMessage) (AutoCompactionStartEvent, error) {
+	var payload struct {
+		Type   string `json:"type"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return AutoCompactionStartEvent{}, err
+	}
+	if err := requireEnvelopeType("event", payload.Type, EventTypeAutoCompactionStart); err != nil {
+		return AutoCompactionStartEvent{}, err
+	}
+	return AutoCompactionStartEvent{Reason: payload.Reason}, nil
+}
+
 func DecodeAutoCompactionEnd(raw json.RawMessage) (AutoCompactionEndEvent, error) {
 	var payload struct {
 		Type         string         `json:"type"`
@@ -92,6 +106,48 @@ func DecodeAutoCompactionEnd(raw json.RawMessage) (AutoCompactionEndEvent, error
 		Aborted:      payload.Aborted,
 		WillRetry:    payload.WillRetry,
 		ErrorMessage: payload.ErrorMessage,
+	}, nil
+}
+
+func DecodeAutoRetryStart(raw json.RawMessage) (AutoRetryStartEvent, error) {
+	var payload struct {
+		Type         string `json:"type"`
+		Attempt      int    `json:"attempt"`
+		MaxAttempts  int    `json:"maxAttempts"`
+		DelayMS      int    `json:"delayMs"`
+		ErrorMessage string `json:"errorMessage"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return AutoRetryStartEvent{}, err
+	}
+	if err := requireEnvelopeType("event", payload.Type, EventTypeAutoRetryStart); err != nil {
+		return AutoRetryStartEvent{}, err
+	}
+	return AutoRetryStartEvent{
+		Attempt:      payload.Attempt,
+		MaxAttempts:  payload.MaxAttempts,
+		DelayMS:      payload.DelayMS,
+		ErrorMessage: payload.ErrorMessage,
+	}, nil
+}
+
+func DecodeAutoRetryEnd(raw json.RawMessage) (AutoRetryEndEvent, error) {
+	var payload struct {
+		Type       string `json:"type"`
+		Success    bool   `json:"success"`
+		Attempt    int    `json:"attempt"`
+		FinalError string `json:"finalError"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return AutoRetryEndEvent{}, err
+	}
+	if err := requireEnvelopeType("event", payload.Type, EventTypeAutoRetryEnd); err != nil {
+		return AutoRetryEndEvent{}, err
+	}
+	return AutoRetryEndEvent{
+		Success:    payload.Success,
+		Attempt:    payload.Attempt,
+		FinalError: payload.FinalError,
 	}, nil
 }
 

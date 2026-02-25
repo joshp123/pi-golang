@@ -61,7 +61,7 @@ These stay close to upstream `docs/rpc.md` command contracts.
 
 - `Run(ctx, PromptRequest)` (sync helper waiting for `agent_end`)
 - `Subscribe(SubscriptionPolicy)` (fanout/backpressure policy)
-- Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionEnd`, `DecodeTerminalOutcome`)
+- Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionStart`, `DecodeAutoCompactionEnd`, `DecodeAutoRetryStart`, `DecodeAutoRetryEnd`, `DecodeTerminalOutcome`)
 - `ShareSession(ctx)` (export + gist helper)
 
 ## Intent map (ontology-first)
@@ -120,6 +120,15 @@ err = client.Abort(ctx)
 
 ```go
 res, err := client.Run(ctx, pi.PromptRequest{Message: "Explain the diff"})
+```
+
+### RunDetailed (sync helper + compaction/retry signals)
+
+```go
+detailed, err := client.RunDetailed(ctx, pi.PromptRequest{Message: "Explain the diff"})
+// detailed.Outcome
+// detailed.AutoCompactionStart / detailed.AutoCompactionEnd
+// detailed.AutoRetryStart / detailed.AutoRetryEnd
 ```
 
 ## Event subscription
@@ -195,11 +204,12 @@ if err == nil {
   - If context has no deadline, a default 2m timeout is applied.
 - Thin mirror methods (`Prompt`, `Steer`, `FollowUp`, `Abort`, `GetState`, `NewSession`, `Compact`, `ExportHTML`) map 1:1 to upstream RPC commands.
 - `GetState` guarantees `SessionState.ContextWindow > 0` (fallback from model metadata when needed; protocol violation otherwise).
-- `Run` is a battery helper:
+- `Run` / `RunDetailed` are battery helpers:
   - single-flight per client (`ErrRunInProgress` on overlap)
-  - sends one `prompt`, waits for `agent_end`
-  - on context cancellation while waiting, sends best-effort `Abort` and returns `ctx.Err()`
-  - surfaces late async `prompt` failures (`response` frames) as `*RPCError`
+  - send one `prompt`, wait for `agent_end`
+  - on context cancellation while waiting, send best-effort `Abort` and return `ctx.Err()`
+  - surface late async `prompt` failures (`response` frames) as `*RPCError`
+- `RunDetailed` additionally returns typed compaction/retry signals from streamed events.
 - `Abort(ctx)` sends upstream `{"type":"abort"}` and waits for command response.
 - Process/lifecycle guarantees:
   - unexpected process exit fails pending requests with `ErrProcessDied`
@@ -207,7 +217,7 @@ if err == nil {
   - closes all subscriber channels after that event
   - `Close()` deterministically unblocks pending requests with `ErrClientClosed`
 - Decoder strictness: RPC/event payloads must include explicit `type` values matching the expected envelope; missing/mismatched types fail fast.
-- Overflow note: upstream RPC does not currently expose a typed `context_exhausted` reason. SDK exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) without provider-specific regex duplication.
+- Overflow note: upstream RPC does not currently expose a typed `context_exhausted` reason. SDK exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) plus typed compaction/retry events (`auto_compaction_*`, `auto_retry_*`) without provider-regex duplication.
 - Raw transport path is internal (`send` + `rpcCommand`/`rpcResponse` are not public API).
 
 ## Modes

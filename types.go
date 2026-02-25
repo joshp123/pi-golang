@@ -31,14 +31,17 @@ const (
 )
 
 const (
-	eventTypeResponse           = "response"
-	EventTypeAgentEnd           = "agent_end"
-	EventTypeMessageUpdate      = "message_update"
-	EventTypeAutoCompactionEnd  = "auto_compaction_end"
-	EventTypeProcessDied        = "process_died"
-	EventTypeSubscriptionDrop   = "subscription_drop"
-	eventTypeParseError         = "parse_error"
-	eventTypeResponseParseError = "response_parse_error"
+	eventTypeResponse            = "response"
+	EventTypeAgentEnd            = "agent_end"
+	EventTypeMessageUpdate       = "message_update"
+	EventTypeAutoCompactionStart = "auto_compaction_start"
+	EventTypeAutoCompactionEnd   = "auto_compaction_end"
+	EventTypeAutoRetryStart      = "auto_retry_start"
+	EventTypeAutoRetryEnd        = "auto_retry_end"
+	EventTypeProcessDied         = "process_died"
+	EventTypeSubscriptionDrop    = "subscription_drop"
+	eventTypeParseError          = "parse_error"
+	eventTypeResponseParseError  = "response_parse_error"
 )
 
 type SubscriptionMode string
@@ -115,6 +118,14 @@ type TerminalOutcome struct {
 	Usage        *Usage
 }
 
+type RunDetailedResult struct {
+	Outcome             TerminalOutcome
+	AutoCompactionStart *AutoCompactionStartEvent
+	AutoCompactionEnd   *AutoCompactionEndEvent
+	AutoRetryStart      *AutoRetryStartEvent
+	AutoRetryEnd        *AutoRetryEndEvent
+}
+
 type ShareResult struct {
 	GistURL    string
 	GistID     string
@@ -184,9 +195,26 @@ type MessageUpdateEvent struct {
 	AssistantMessageEvent AssistantMessageDelta `json:"assistantMessageEvent"`
 }
 
+type AutoCompactionStartEvent struct {
+	Reason string `json:"reason"`
+}
+
 type AutoCompactionEndEvent struct {
 	Result       *CompactResult `json:"result"`
 	Aborted      bool           `json:"aborted"`
 	WillRetry    bool           `json:"willRetry"`
 	ErrorMessage string         `json:"errorMessage,omitempty"`
+}
+
+type AutoRetryStartEvent struct {
+	Attempt      int    `json:"attempt"`
+	MaxAttempts  int    `json:"maxAttempts"`
+	DelayMS      int    `json:"delayMs"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
+}
+
+type AutoRetryEndEvent struct {
+	Success    bool   `json:"success"`
+	Attempt    int    `json:"attempt"`
+	FinalError string `json:"finalError,omitempty"`
 }

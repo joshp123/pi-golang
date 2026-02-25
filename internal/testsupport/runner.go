@@ -14,9 +14,13 @@ const (
 	commandNewSession = "new_session"
 	commandCompact    = "compact"
 
-	eventTypeResponse      = "response"
-	eventTypeAgentEnd      = "agent_end"
-	eventTypeMessageUpdate = "message_update"
+	eventTypeResponse            = "response"
+	eventTypeAgentEnd            = "agent_end"
+	eventTypeMessageUpdate       = "message_update"
+	eventTypeAutoCompactionStart = "auto_compaction_start"
+	eventTypeAutoCompactionEnd   = "auto_compaction_end"
+	eventTypeAutoRetryStart      = "auto_retry_start"
+	eventTypeAutoRetryEnd        = "auto_retry_end"
 )
 
 func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
@@ -66,6 +70,10 @@ func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
 			}
 		case "run_ctx_cancel_aborts":
 			if err := handleRunCancelAbortScenario(writer, &runCancelAbort, requestID, commandType); err != nil {
+				return err
+			}
+		case "run_detailed_signals":
+			if err := handleRunDetailedSignalsScenario(writer, requestID, commandType); err != nil {
 				return err
 			}
 		case "never_respond":

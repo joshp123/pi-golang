@@ -147,3 +147,36 @@ func TestDecodeAutoCompactionEndVariants(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeAutoCompactionStart(t *testing.T) {
+	raw := json.RawMessage(`{"type":"auto_compaction_start","reason":"overflow"}`)
+	event, err := DecodeAutoCompactionStart(raw)
+	if err != nil {
+		t.Fatalf("DecodeAutoCompactionStart returned error: %v", err)
+	}
+	if event.Reason != "overflow" {
+		t.Fatalf("expected reason overflow, got %q", event.Reason)
+	}
+}
+
+func TestDecodeAutoRetryStart(t *testing.T) {
+	raw := json.RawMessage(`{"type":"auto_retry_start","attempt":1,"maxAttempts":3,"delayMs":2000,"errorMessage":"overloaded"}`)
+	event, err := DecodeAutoRetryStart(raw)
+	if err != nil {
+		t.Fatalf("DecodeAutoRetryStart returned error: %v", err)
+	}
+	if event.Attempt != 1 || event.MaxAttempts != 3 || event.DelayMS != 2000 {
+		t.Fatalf("unexpected auto_retry_start payload: %+v", event)
+	}
+}
+
+func TestDecodeAutoRetryEnd(t *testing.T) {
+	raw := json.RawMessage(`{"type":"auto_retry_end","success":false,"attempt":3,"finalError":"quota"}`)
+	event, err := DecodeAutoRetryEnd(raw)
+	if err != nil {
+		t.Fatalf("DecodeAutoRetryEnd returned error: %v", err)
+	}
+	if event.Success || event.Attempt != 3 || event.FinalError != "quota" {
+		t.Fatalf("unexpected auto_retry_end payload: %+v", event)
+	}
+}

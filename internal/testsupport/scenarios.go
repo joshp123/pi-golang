@@ -215,6 +215,39 @@ func handleRunCancelAbortScenario(writer *bufio.Writer, state *runCancelAbortSta
 	}
 }
 
+func handleRunDetailedSignalsScenario(writer *bufio.Writer, requestID string, commandType string) error {
+	switch commandType {
+	case commandPrompt:
+		if err := writeResponse(writer, requestID, commandType, true, nil, ""); err != nil {
+			return err
+		}
+		if err := writeEvent(writer, map[string]any{"type": eventTypeAutoCompactionStart, "reason": "overflow"}); err != nil {
+			return err
+		}
+		if err := writeEvent(writer, map[string]any{"type": eventTypeAutoCompactionEnd, "result": map[string]any{"summary": "compacted", "firstKeptEntryId": "entry-1", "tokensBefore": 120000}, "aborted": false, "willRetry": true}); err != nil {
+			return err
+		}
+		if err := writeEvent(writer, map[string]any{"type": eventTypeAutoRetryStart, "attempt": 1, "maxAttempts": 3, "delayMs": 10, "errorMessage": "overflow"}); err != nil {
+			return err
+		}
+		if err := writeEvent(writer, map[string]any{"type": eventTypeAutoRetryEnd, "success": true, "attempt": 1}); err != nil {
+			return err
+		}
+		return writeEvent(writer, map[string]any{
+			"type": eventTypeAgentEnd,
+			"messages": []map[string]any{
+				{
+					"role":    "assistant",
+					"content": []map[string]any{{"type": "text", "text": "after compaction"}},
+					"usage":   map[string]any{"input": 10, "output": 5, "cacheRead": 0, "cacheWrite": 0},
+				},
+			},
+		})
+	default:
+		return writeResponse(writer, requestID, commandType, true, map[string]any{}, "")
+	}
+}
+
 func writeResponse(writer *bufio.Writer, id string, command string, success bool, data any, errText string) error {
 	payload := map[string]any{
 		"type":    eventTypeResponse,

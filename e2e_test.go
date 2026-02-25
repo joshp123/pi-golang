@@ -246,6 +246,39 @@ func TestRunContextCancellationBestEffortAborts(t *testing.T) {
 	}
 }
 
+func TestRunDetailedCapturesCompactionAndRetrySignals(t *testing.T) {
+	setupFakePI(t, "run_detailed_signals")
+
+	client, err := StartOneShot(DefaultOneShotOptions())
+	if err != nil {
+		t.Fatalf("StartOneShot failed: %v", err)
+	}
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	result, err := client.RunDetailed(ctx, PromptRequest{Message: "start"})
+	if err != nil {
+		t.Fatalf("RunDetailed failed: %v", err)
+	}
+	if result.Outcome.Text != "after compaction" {
+		t.Fatalf("unexpected outcome text: %q", result.Outcome.Text)
+	}
+	if result.AutoCompactionStart == nil || result.AutoCompactionStart.Reason != "overflow" {
+		t.Fatalf("expected auto_compaction_start overflow, got %+v", result.AutoCompactionStart)
+	}
+	if result.AutoCompactionEnd == nil || !result.AutoCompactionEnd.WillRetry {
+		t.Fatalf("expected auto_compaction_end with willRetry=true, got %+v", result.AutoCompactionEnd)
+	}
+	if result.AutoRetryStart == nil || result.AutoRetryStart.Attempt != 1 {
+		t.Fatalf("expected auto_retry_start attempt=1, got %+v", result.AutoRetryStart)
+	}
+	if result.AutoRetryEnd == nil || !result.AutoRetryEnd.Success {
+		t.Fatalf("expected auto_retry_end success=true, got %+v", result.AutoRetryEnd)
+	}
+}
+
 func TestSendStillReturnsResponseWhenBlockSubscriberIsNotConsuming(t *testing.T) {
 	setupFakePI(t, "flood_before_response")
 
