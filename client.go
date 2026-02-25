@@ -26,7 +26,6 @@ func debugf(format string, args ...any) {
 }
 
 type Client struct {
-	command Command
 	process *exec.Cmd
 	stdin   io.WriteCloser
 
@@ -43,7 +42,6 @@ type Client struct {
 	closed    chan struct{}
 
 	waitDone chan struct{}
-	waitErr  error
 
 	processErrOnce sync.Once
 
@@ -162,7 +160,6 @@ func startClient(config startConfig) (*Client, error) {
 	}
 
 	client := &Client{
-		command:          command,
 		process:          cmd,
 		stdin:            stdin,
 		requests:         newRequestManager(),

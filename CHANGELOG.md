@@ -10,6 +10,9 @@
 - Make Run cancellation semantics explicit: on ctx cancel while waiting, send best-effort abort then return ctx error
 - Enforce strict envelope type decoding for RPC responses and typed event decoders (no missing-type fallback)
 - Centralize canonical command/event terms in one ontology constant set and remove string drift in core paths
+- Split oversized e2e test fixture into focused files to keep test files under 400 LOC and improve explainability
+- Remove unused client state (`command`, `waitErr`) and keep lifecycle flow minimal (wait -> mark process died)
+- Add local directory AGENTS docs for `examples/` and `scripts/` to improve tree-level discoverability
 
 ## v0.0.7
 

@@ -51,7 +51,7 @@ func (client *Client) dispatchEvents() {
 }
 
 func (client *Client) waitForProcess() {
-	client.waitErr = client.process.Wait()
+	waitErr := client.process.Wait()
 	close(client.waitDone)
 
 	select {
@@ -59,8 +59,8 @@ func (client *Client) waitForProcess() {
 		return
 	default:
 	}
-	if client.waitErr != nil {
-		client.markProcessDied(client.waitErr)
+	if waitErr != nil {
+		client.markProcessDied(waitErr)
 		return
 	}
 
