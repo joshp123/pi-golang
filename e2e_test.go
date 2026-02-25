@@ -220,10 +220,18 @@ func TestRunContextCancellationBestEffortAborts(t *testing.T) {
 	}
 	defer client.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-	_, err = client.Run(ctx, PromptRequest{Message: "start"})
-	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() {
+		_, runErrValue := client.Run(ctx, PromptRequest{Message: "start"})
+		runErr <- runErrValue
+	}()
+
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+
+	err = <-runErr
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context cancellation from Run, got %v", err)
 	}
 

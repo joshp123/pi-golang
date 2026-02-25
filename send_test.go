@@ -2,6 +2,7 @@ package pi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -68,5 +69,25 @@ func TestAbortCommandUsesUpstreamType(t *testing.T) {
 	}
 	if len(command) != 1 {
 		t.Fatalf("expected abort command to contain only type, got %d fields", len(command))
+	}
+}
+
+func TestDecodeSessionStateRequiresContextWindow(t *testing.T) {
+	_, err := decodeSessionState(json.RawMessage(`{"sessionId":"s1"}`))
+	if err == nil {
+		t.Fatal("expected context window protocol violation")
+	}
+}
+
+func TestDecodeSessionStateFallsBackToModelContextWindow(t *testing.T) {
+	state, err := decodeSessionState(json.RawMessage(`{
+		"sessionId":"s1",
+		"model":{"id":"m","provider":"anthropic","contextWindow":200000,"maxTokens":8192}
+	}`))
+	if err != nil {
+		t.Fatalf("decodeSessionState returned error: %v", err)
+	}
+	if state.ContextWindow != 200000 {
+		t.Fatalf("expected context window fallback from model, got %d", state.ContextWindow)
 	}
 }

@@ -91,6 +91,9 @@ func decodeSessionState(data json.RawMessage) (SessionState, error) {
 	if state.ContextWindow == 0 && state.Model != nil {
 		state.ContextWindow = state.Model.ContextWindow
 	}
+	if state.ContextWindow <= 0 {
+		return SessionState{}, fmt.Errorf("%w: get_state missing context window", ErrProtocolViolation)
+	}
 	return state, nil
 }
 

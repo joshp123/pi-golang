@@ -2,7 +2,6 @@ package pi
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -109,30 +108,13 @@ func requireEnvelopeType(kind string, actual string, expected string) error {
 func extractRunResult(event Event) (RunResult, error) {
 	debugExtract("parsing agent_end payload (%d bytes)", len(event.Raw))
 
-	agentEnd, err := DecodeAgentEnd(event.Raw)
+	outcome, err := DecodeTerminalOutcome(event.Raw)
 	if err != nil {
 		debugExtract("decode error: %v", err)
 		return RunResult{}, err
 	}
-	debugExtract("found %d messages", len(agentEnd.Messages))
-
-	for index := len(agentEnd.Messages) - 1; index >= 0; index-- {
-		message := agentEnd.Messages[index]
-		debugExtract("message[%d] role=%s", index, message.Role)
-		if message.Role != "assistant" {
-			continue
-		}
-		text, err := extractAssistantText(message.Content)
-		if err != nil {
-			debugExtract("extractAssistantText error: %v", err)
-			return RunResult{}, err
-		}
-		debugExtract("extracted text (%d chars), returning", len(text))
-		return RunResult{Text: text, Usage: message.Usage}, nil
-	}
-
-	debugExtract("no assistant message found")
-	return RunResult{}, errors.New("assistant message not found in agent_end")
+	debugExtract("terminal status=%s", outcome.Status)
+	return RunResult{Text: outcome.Text, Usage: outcome.Usage}, nil
 }
 
 func extractAssistantText(content json.RawMessage) (string, error) {

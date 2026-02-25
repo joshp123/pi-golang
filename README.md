@@ -61,7 +61,7 @@ These stay close to upstream `docs/rpc.md` command contracts.
 
 - `Run(ctx, PromptRequest)` (sync helper waiting for `agent_end`)
 - `Subscribe(SubscriptionPolicy)` (fanout/backpressure policy)
-- Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionEnd`)
+- Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionEnd`, `DecodeTerminalOutcome`)
 - `ShareSession(ctx)` (export + gist helper)
 
 ## Intent map (ontology-first)
@@ -178,12 +178,23 @@ case "auto_compaction_end":
 }
 ```
 
+Canonical terminal outcome (`agent_end` payload):
+
+```go
+outcome, err := pi.DecodeTerminalOutcome(event.Raw)
+if err == nil {
+    // outcome.Status: completed | failed | aborted
+    // outcome.Text, outcome.StopReason, outcome.ErrorMessage, outcome.Usage
+}
+```
+
 ## API contract
 
 - Contexts:
   - RPC methods require non-nil context (`ErrNilContext`).
   - If context has no deadline, a default 2m timeout is applied.
 - Thin mirror methods (`Prompt`, `Steer`, `FollowUp`, `Abort`, `GetState`, `NewSession`, `Compact`, `ExportHTML`) map 1:1 to upstream RPC commands.
+- `GetState` guarantees `SessionState.ContextWindow > 0` (fallback from model metadata when needed; protocol violation otherwise).
 - `Run` is a battery helper:
   - single-flight per client (`ErrRunInProgress` on overlap)
   - sends one `prompt`, waits for `agent_end`
@@ -196,6 +207,7 @@ case "auto_compaction_end":
   - closes all subscriber channels after that event
   - `Close()` deterministically unblocks pending requests with `ErrClientClosed`
 - Decoder strictness: RPC/event payloads must include explicit `type` values matching the expected envelope; missing/mismatched types fail fast.
+- Overflow note: upstream RPC does not currently expose a typed `context_exhausted` reason. SDK exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) without provider-specific regex duplication.
 - Raw transport path is internal (`send` + `rpcCommand`/`rpcResponse` are not public API).
 
 ## Modes

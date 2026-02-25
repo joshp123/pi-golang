@@ -99,6 +99,22 @@ type RunResult struct {
 	Usage *Usage
 }
 
+type TerminalStatus string
+
+const (
+	TerminalStatusCompleted TerminalStatus = "completed"
+	TerminalStatusFailed    TerminalStatus = "failed"
+	TerminalStatusAborted   TerminalStatus = "aborted"
+)
+
+type TerminalOutcome struct {
+	Status       TerminalStatus
+	Text         string
+	StopReason   string
+	ErrorMessage string
+	Usage        *Usage
+}
+
 type ShareResult struct {
 	GistURL    string
 	GistID     string

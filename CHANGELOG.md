@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.0.9
+
+- Add canonical `DecodeTerminalOutcome` for `agent_end` payloads (`completed|failed|aborted` + text/stopReason/error/usage)
+- Tighten `GetState` contract: `SessionState.ContextWindow` must be present (>0) after model fallback
+- Move fake-pi e2e harness into `internal/testsupport/` (setup/runner/scenarios) for clearer tree-level architecture
+- Add local `AGENTS.md` docs for new internal directories
+- Keep overflow handling strict: no copied provider-regex classifier in core SDK until upstream RPC exposes a typed reason
+
 ## v0.0.8
 
 - Add typed `Abort(ctx)` with upstream RPC parity (`{"type":"abort"}`)
