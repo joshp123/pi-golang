@@ -17,7 +17,7 @@ func main() {
 	}
 	defer client.Close()
 
-	result, err := client.Run(context.Background(), "Say hello in one sentence.")
+	result, err := client.Run(context.Background(), pi.PromptRequest{Message: "Say hello in one sentence."})
 	if err != nil {
 		log.Fatalf("run: %v", err)
 	}

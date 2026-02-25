@@ -3,6 +3,7 @@ package pi
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -181,9 +182,15 @@ func copyIfNewer(source string, dest string, mode os.FileMode) error {
 }
 
 func mapToEnvSlice(values map[string]string) []string {
-	out := make([]string, 0, len(values))
-	for key, value := range values {
-		out = append(out, key+"="+value)
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, key+"="+values[key])
 	}
 	return out
 }

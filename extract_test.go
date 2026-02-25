@@ -4,7 +4,7 @@ import "testing"
 
 func TestExtractRunResult(t *testing.T) {
 	eventJSON := `{"type":"agent_end","messages":[{"role":"user","content":"hi"},{"role":"assistant","content":[{"type":"text","text":"hello"},{"type":"thinking","thinking":"..."}],"usage":{"input":10,"output":5,"cacheRead":1,"cacheWrite":2,"cost":{"input":0.1,"output":0.2,"cacheRead":0.01,"cacheWrite":0.02,"total":0.33}}}]}`
-	result, err := extractRunResult(Event{Type: "agent_end", Raw: []byte(eventJSON)})
+	result, err := extractRunResult(Event{Type: EventTypeAgentEnd, Raw: []byte(eventJSON)})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

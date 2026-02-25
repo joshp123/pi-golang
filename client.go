@@ -1,17 +1,12 @@
 package pi
 
 import (
-	"bufio"
 	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,7 +16,7 @@ import (
 
 var defaultShutdownTimeout = 2 * time.Second
 
-// Debug enables verbose logging when PI_DEBUG=1
+// Debug enables verbose logging when PI_DEBUG=1.
 var Debug = os.Getenv("PI_DEBUG") == "1"
 
 func debugf(format string, args ...any) {
@@ -31,17 +26,32 @@ func debugf(format string, args ...any) {
 }
 
 type Client struct {
-	command        Command
-	process        *exec.Cmd
-	stdin          io.WriteCloser
-	stderr         bytes.Buffer
-	pending        map[string]chan Response
-	subscribers    map[chan Event]struct{}
+	command Command
+	process *exec.Cmd
+	stdin   io.WriteCloser
+
+	stderr   bytes.Buffer
+	stderrMu sync.Mutex
+
+	requests *requestManager
+	events   *eventHub
+
 	requestCounter uint64
-	lock           sync.Mutex
-	writeLock      sync.Mutex
-	closeOnce      sync.Once
-	closed         chan struct{}
+
+	writeLock sync.Mutex
+	closeOnce sync.Once
+	closed    chan struct{}
+
+	waitDone chan struct{}
+	waitErr  error
+
+	processErrOnce sync.Once
+
+	eventQueue       *eventQueue
+	eventDispatchEnd chan struct{}
+	stopDispatchOnce sync.Once
+
+	runInProgress atomic.Bool
 }
 
 type SessionClient struct {
@@ -101,72 +111,6 @@ func StartOneShot(options OneShotOptions) (*OneShotClient, error) {
 	return &OneShotClient{Client: client}, nil
 }
 
-func (client *SessionClient) ExportHTML(ctx context.Context, outputPath string) (string, error) {
-	command := RpcCommand{
-		"type": "export_html",
-	}
-	if strings.TrimSpace(outputPath) != "" {
-		command["outputPath"] = outputPath
-	}
-	response, err := client.Send(ctx, command)
-	if err != nil {
-		return "", err
-	}
-	var payload struct {
-		Path string `json:"path"`
-	}
-	if err := json.Unmarshal(response.Data, &payload); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(payload.Path) == "" {
-		return "", errors.New("export_html returned empty path")
-	}
-	return payload.Path, nil
-}
-
-func (client *SessionClient) ShareSession(ctx context.Context) (ShareResult, error) {
-	ghPath, err := exec.LookPath("gh")
-	if err != nil {
-		return ShareResult{}, errors.New("gh CLI not found; install https://cli.github.com/")
-	}
-	tmpDir, err := os.MkdirTemp("", "pi-golang-session-")
-	if err != nil {
-		return ShareResult{}, err
-	}
-	defer os.RemoveAll(tmpDir)
-
-	exportPath := filepath.Join(tmpDir, "session.html")
-	path, err := client.ExportHTML(ctx, exportPath)
-	if err != nil {
-		return ShareResult{}, err
-	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, ghPath, "gist", "create", "--public=false", path)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		errText := strings.TrimSpace(stderr.String())
-		if errText == "" {
-			errText = err.Error()
-		}
-		return ShareResult{}, fmt.Errorf("gh gist create failed: %s", errText)
-	}
-
-	gistURL := strings.TrimSpace(stdout.String())
-	if gistURL == "" {
-		return ShareResult{}, errors.New("gh gist create returned empty URL")
-	}
-	parts := strings.Split(strings.TrimRight(gistURL, "/"), "/")
-	gistID := parts[len(parts)-1]
-	if strings.TrimSpace(gistID) == "" {
-		return ShareResult{}, errors.New("failed to parse gist ID")
-	}
-	previewURL := fmt.Sprintf("https://shittycodingagent.ai/session/?%s", gistID)
-	return ShareResult{GistURL: gistURL, GistID: gistID, PreviewURL: previewURL}, nil
-}
-
 func startClient(config startConfig) (*Client, error) {
 	modelConfig, err := resolveModelConfig(config.mode, config.dragons)
 	if err != nil {
@@ -176,7 +120,6 @@ func startClient(config startConfig) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	env, err := buildEnv(config.appName)
 	if err != nil {
 		return nil, err
@@ -219,12 +162,15 @@ func startClient(config startConfig) (*Client, error) {
 	}
 
 	client := &Client{
-		command:     command,
-		process:     cmd,
-		stdin:       stdin,
-		pending:     map[string]chan Response{},
-		subscribers: map[chan Event]struct{}{},
-		closed:      make(chan struct{}),
+		command:          command,
+		process:          cmd,
+		stdin:            stdin,
+		requests:         newRequestManager(),
+		events:           newEventHub(),
+		closed:           make(chan struct{}),
+		waitDone:         make(chan struct{}),
+		eventQueue:       newEventQueue(),
+		eventDispatchEnd: make(chan struct{}),
 	}
 
 	if err := cmd.Start(); err != nil {
@@ -232,193 +178,62 @@ func startClient(config startConfig) (*Client, error) {
 	}
 
 	go client.captureStderr(stderr)
+	go client.dispatchEvents()
 	go client.readStdout(stdout)
+	go client.waitForProcess()
 
 	return client, nil
 }
 
 func (client *Client) Close() error {
-	debugf("Close: starting")
-	var closeErr error
 	client.closeOnce.Do(func() {
-		debugf("Close: closing closed channel")
 		close(client.closed)
-		debugf("Close: closing stdin")
 		if client.stdin != nil {
 			_ = client.stdin.Close()
 		}
-		debugf("Close: sending SIGTERM")
 		if client.process != nil && client.process.Process != nil {
 			_ = client.process.Process.Signal(syscall.SIGTERM)
 		}
 
-		debugf("Close: waiting for process to exit (timeout=%v)", defaultShutdownTimeout)
-		done := make(chan struct{})
-		go func() {
-			if client.process != nil {
-				_ = client.process.Wait()
-			}
-			close(done)
-		}()
-
 		select {
-		case <-done:
-			debugf("Close: process exited cleanly")
+		case <-client.waitDone:
 		case <-time.After(defaultShutdownTimeout):
-			debugf("Close: timeout, killing process")
 			if client.process != nil && client.process.Process != nil {
 				_ = client.process.Process.Kill()
 			}
+			<-client.waitDone
 		}
 
-		debugf("Close: cleaning up subscribers and pending")
-		debugf("Close: acquiring lock...")
-		client.lock.Lock()
-		debugf("Close: lock acquired")
-		for ch := range client.subscribers {
-			close(ch)
+		client.closeAll(nil)
+		select {
+		case <-client.eventDispatchEnd:
+		case <-time.After(250 * time.Millisecond):
 		}
-		client.subscribers = map[chan Event]struct{}{}
-		for _, responseChan := range client.pending {
-			close(responseChan)
-		}
-		client.pending = map[string]chan Response{}
-		client.lock.Unlock()
-		debugf("Close: done")
 	})
-
-	debugf("Close: returning")
-	return closeErr
+	return nil
 }
 
 func (client *Client) Stderr() string {
+	client.stderrMu.Lock()
+	defer client.stderrMu.Unlock()
 	return client.stderr.String()
 }
 
-func (client *Client) Subscribe(buffer int) (<-chan Event, func()) {
-	if buffer <= 0 {
-		buffer = 16
+func (client *Client) appendStderr(chunk []byte) {
+	if len(chunk) == 0 {
+		return
 	}
-	ch := make(chan Event, buffer)
-	client.lock.Lock()
-	client.subscribers[ch] = struct{}{}
-	numSubs := len(client.subscribers)
-	client.lock.Unlock()
-	debugf("Subscribe: buffer=%d, total_subscribers=%d", buffer, numSubs)
-
-	var cancelled bool
-	return ch, func() {
-		client.lock.Lock()
-		if cancelled {
-			client.lock.Unlock()
-			debugf("Unsubscribe: already cancelled, skipping")
-			return
-		}
-		cancelled = true
-		delete(client.subscribers, ch)
-		close(ch)
-		numSubs := len(client.subscribers)
-		client.lock.Unlock()
-		debugf("Unsubscribe: remaining_subscribers=%d", numSubs)
-	}
+	client.stderrMu.Lock()
+	_, _ = client.stderr.Write(chunk)
+	client.stderrMu.Unlock()
 }
 
-func (client *Client) Send(ctx context.Context, command RpcCommand) (Response, error) {
-	if command == nil {
-		return Response{}, errors.New("command is required")
-	}
-	if _, ok := command["type"]; !ok {
-		return Response{}, errors.New("command type is required")
-	}
-
-	requestID := client.nextRequestID()
-	command["id"] = requestID
-
-	payload, err := json.Marshal(command)
-	if err != nil {
-		return Response{}, err
-	}
-
-	responseChan := make(chan Response, 1)
-	client.lock.Lock()
-	client.pending[requestID] = responseChan
-	client.lock.Unlock()
-
-	client.writeLock.Lock()
-	_, writeErr := client.stdin.Write(append(payload, '\n'))
-	client.writeLock.Unlock()
-	if writeErr != nil {
-		client.dropPending(requestID)
-		return Response{}, writeErr
-	}
-
-	select {
-	case <-client.closed:
-		client.dropPending(requestID)
-		return Response{}, errors.New("client closed")
-	case <-ctx.Done():
-		client.dropPending(requestID)
-		return Response{}, ctx.Err()
-	case response, ok := <-responseChan:
-		if !ok {
-			return Response{}, errors.New("response channel closed")
+func (client *Client) stopEventDispatch() {
+	client.stopDispatchOnce.Do(func() {
+		if client.eventQueue != nil {
+			client.eventQueue.close()
 		}
-		if !response.Success {
-			if response.Error == "" {
-				return response, errors.New("rpc command failed")
-			}
-			return response, errors.New(response.Error)
-		}
-		return response, nil
-	}
-}
-
-func (client *Client) Prompt(ctx context.Context, message string, images ...ImageContent) error {
-	if strings.TrimSpace(message) == "" {
-		return errors.New("message is required")
-	}
-	command := RpcCommand{
-		"type":    "prompt",
-		"message": message,
-	}
-	if len(images) > 0 {
-		command["images"] = images
-	}
-	_, err := client.Send(ctx, command)
-	return err
-}
-
-func (client *Client) Run(ctx context.Context, message string) (RunResult, error) {
-	// Subscribe BEFORE sending prompt to avoid race condition where
-	// agent_end is broadcast before we're listening
-	debugf("Run: subscribing before prompt")
-	events, cancel := client.Subscribe(256)
-	defer cancel()
-
-	debugf("Run: sending prompt")
-	if err := client.Prompt(ctx, message); err != nil {
-		return RunResult{}, err
-	}
-
-	debugf("Run: waiting for agent_end")
-	for {
-		select {
-		case <-ctx.Done():
-			debugf("Run: context cancelled")
-			return RunResult{}, ctx.Err()
-		case event, ok := <-events:
-			if !ok {
-				debugf("Run: event stream closed")
-				return RunResult{}, errors.New("event stream closed")
-			}
-			if event.Type == "agent_end" {
-				debugf("Run: received agent_end, extracting result")
-				result, err := extractRunResult(event)
-				debugf("Run: extractRunResult returned, text=%d chars, err=%v", len(result.Text), err)
-				return result, err
-			}
-		}
-	}
+	})
 }
 
 func (client *Client) nextRequestID() string {
@@ -426,103 +241,12 @@ func (client *Client) nextRequestID() string {
 	return fmt.Sprintf("req-%d", value)
 }
 
-func (client *Client) dropPending(requestID string) {
-	client.lock.Lock()
-	responseChan, ok := client.pending[requestID]
-	if ok {
-		delete(client.pending, requestID)
-		close(responseChan)
+func (client *Client) Subscribe(policy SubscriptionPolicy) (<-chan Event, func(), error) {
+	if err := client.currentProcessError(); err != nil {
+		return nil, nil, err
 	}
-	client.lock.Unlock()
-}
-
-func (client *Client) captureStderr(stderr io.Reader) {
-	_, _ = io.Copy(&client.stderr, stderr)
-}
-
-func (client *Client) readStdout(stdout io.Reader) {
-	debugf("readStdout: started")
-	reader := bufio.NewReader(stdout)
-	for {
-		line, err := reader.ReadBytes('\n')
-		line = bytes.TrimSpace(line)
-		if len(line) > 0 {
-			debugf("readStdout: processing line (%d bytes)", len(line))
-			client.handleLine(line)
-			debugf("readStdout: line processed")
-		}
-		if err != nil {
-			debugf("readStdout: exiting due to err=%v", err)
-			return
-		}
+	if client.isClosed() {
+		return nil, nil, ErrClientClosed
 	}
-}
-
-func (client *Client) handleLine(line []byte) {
-	var envelope struct {
-		Type string `json:"type"`
-		ID   string `json:"id,omitempty"`
-	}
-	if err := json.Unmarshal(line, &envelope); err != nil {
-		client.broadcastEvent(Event{Type: "parse_error", Raw: append([]byte{}, line...)})
-		return
-	}
-
-	if envelope.Type == "response" {
-		var response Response
-		if err := json.Unmarshal(line, &response); err != nil {
-			client.broadcastEvent(Event{Type: "response_parse_error", Raw: append([]byte{}, line...)})
-			return
-		}
-		debugf("handleLine: acquiring lock for response id=%s", response.ID)
-		client.lock.Lock()
-		debugf("handleLine: lock acquired")
-		responseChan := client.pending[response.ID]
-		delete(client.pending, response.ID)
-		client.lock.Unlock()
-		if responseChan != nil {
-			responseChan <- response
-			close(responseChan)
-		}
-		return
-	}
-
-	client.broadcastEvent(Event{Type: envelope.Type, Raw: append([]byte{}, line...)})
-}
-
-func (client *Client) broadcastEvent(event Event) {
-	debugf("broadcastEvent: acquiring lock for type=%s", event.Type)
-	client.lock.Lock()
-	debugf("broadcastEvent: lock acquired")
-	numSubs := len(client.subscribers)
-	if event.Type == "agent_end" {
-		debugf("broadcastEvent agent_end to %d subscribers", numSubs)
-	}
-	for ch := range client.subscribers {
-		if event.Type == "agent_end" {
-			select {
-			case ch <- event:
-				debugf("agent_end delivered to subscriber (cap=%d, len=%d)", cap(ch), len(ch))
-			default:
-				debugf("agent_end BLOCKED, trying to drop oldest (cap=%d, len=%d)", cap(ch), len(ch))
-				select {
-				case <-ch:
-				default:
-				}
-				select {
-				case ch <- event:
-					debugf("agent_end delivered after drop")
-				default:
-					debugf("agent_end FAILED even after drop")
-				}
-			}
-			continue
-		}
-		select {
-		case ch <- event:
-		default:
-		}
-	}
-	debugf("broadcastEvent: releasing lock")
-	client.lock.Unlock()
+	return client.events.subscribe(policy)
 }
