@@ -1,49 +1,41 @@
 package pi
 
-type modelConfig struct {
-	provider string
-	model    string
-	thinking string
+import "github.com/joshp123/pi-golang/internal/sdk"
+
+const (
+	DefaultProvider       = sdk.DefaultProvider
+	DefaultModel          = sdk.DefaultModel
+	DefaultThinking       = sdk.DefaultThinking
+	DefaultDumbThinking   = sdk.DefaultDumbThinking
+	DefaultFastModel      = sdk.DefaultFastModel
+	DefaultCodingProvider = sdk.DefaultCodingProvider
+	DefaultCodingModel    = sdk.DefaultCodingModel
+	DefaultCodingThinking = sdk.DefaultCodingThinking
+)
+
+type Mode = sdk.Mode
+
+const (
+	ModeSmart   = sdk.ModeSmart
+	ModeDumb    = sdk.ModeDumb
+	ModeFast    = sdk.ModeFast
+	ModeCoding  = sdk.ModeCoding
+	ModeDragons = sdk.ModeDragons
+)
+
+type DragonsOptions = sdk.DragonsOptions
+type Credential = sdk.Credential
+type APIKeyAuth = sdk.APIKeyAuth
+type AnthropicAuth = sdk.AnthropicAuth
+type BedrockAuth = sdk.BedrockAuth
+type ProviderAuth = sdk.ProviderAuth
+type SessionOptions = sdk.SessionOptions
+type OneShotOptions = sdk.OneShotOptions
+
+func DefaultSessionOptions() SessionOptions {
+	return sdk.DefaultSessionOptions()
 }
 
-func resolveModelConfig(mode Mode, dragons DragonsOptions) (modelConfig, error) {
-	if err := validateMode(mode, dragons); err != nil {
-		return modelConfig{}, err
-	}
-	dragons = trimDragons(dragons)
-
-	switch mode {
-	case ModeSmart:
-		return modelConfig{
-			provider: DefaultProvider,
-			model:    DefaultModel,
-			thinking: DefaultThinking,
-		}, nil
-	case ModeDumb:
-		return modelConfig{
-			provider: DefaultProvider,
-			model:    DefaultModel,
-			thinking: DefaultDumbThinking,
-		}, nil
-	case ModeFast:
-		return modelConfig{
-			provider: DefaultProvider,
-			model:    DefaultFastModel,
-			thinking: DefaultDumbThinking,
-		}, nil
-	case ModeCoding:
-		return modelConfig{
-			provider: DefaultCodingProvider,
-			model:    DefaultCodingModel,
-			thinking: DefaultCodingThinking,
-		}, nil
-	case ModeDragons:
-		return modelConfig{
-			provider: dragons.Provider,
-			model:    dragons.Model,
-			thinking: dragons.Thinking,
-		}, nil
-	default:
-		return modelConfig{}, validateMode(mode, dragons)
-	}
+func DefaultOneShotOptions() OneShotOptions {
+	return sdk.DefaultOneShotOptions()
 }

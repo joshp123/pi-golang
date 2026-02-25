@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.0.13
+
+- Add generic `CompactionPrompt` option to `SessionOptions` and `OneShotOptions`
+- Add SDK-managed compaction hook bootstrap:
+  - creates temp extension bundle + prompt file
+  - starts pi with `--extension <bundle>/compaction-hook.ts`
+  - injects `PI_GOLANG_COMPACTION_PROMPT_FILE` and `PI_GOLANG_COMPACTION_PROMPT_SHA256`
+  - cleans up temp bundle on `Close()`
+- Add tests for hook bundle generation, env/arg injection, and cleanup
+- Add real-pi integration coverage to verify hook execution via compaction details marker (`source: pi-golang-compaction-prompt`)
+- Document `CompactionPrompt` usage and contract in README
+
+## v0.0.12
+
+- Refactor package layout to root API façade + `internal/sdk` implementation package
+- Add `internal/sdk/tests/` for black-box/e2e behavior tests; keep white-box invariants in `internal/sdk/*_test.go`
+- Keep public API/contracts stable via root re-exports (`Client`, typed entrypoints, errors, decoders, modes/options)
+- Add explicit auth/env controls on start options (`Auth`, `Environment`, `InheritEnvironment`, `SeedAuthFromHome`)
+- Flip default to explicit environment (`InheritEnvironment=false`) and keep home-auth seeding configurable (`SeedAuthFromHome`)
+- Remove legacy OAuth file fallback search paths; seed only from `~/.pi/agent` when enabled
+- Add real pi integration tests (`internal/sdk/tests/real_pi_integration_test.go`, `-tags=integration`, `PI_REAL=1`) plus strict prereq mode (`PI_REAL_REQUIRED=1`)
+- Add release gate script `scripts/check-release.sh` that requires real-pi integration pass
+- Trim fake-harness e2e scope to deterministic fault-injection invariants (no broad happy-path duplication)
+- Rewrite internal AGENTS docs to Feynman-style plain-language behavior explanations
+
+## v0.0.11
+
+- Architecture pass: move runtime concerns into explicit internal folders (`internal/rpc`, `internal/transport`, `internal/stream`)
+- Remove root-level slop wrappers by centralizing event fanout/backpressure into a generic internal stream hub
+- Keep thin mirror + batteries contracts stable while replacing private wire names with `internal/rpc` canonical constants
+- Add local `AGENTS.md` docs for new internal architecture directories for tree-level discoverability
+
 ## v0.0.10
 
 - Extract generic runtime primitives to `internal/runtime/` (`PendingRegistry`, `Queue`) and keep root wrappers thin

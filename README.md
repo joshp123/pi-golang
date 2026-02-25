@@ -8,16 +8,29 @@ Thanks to Mario Zechner and the pi project: [pi-mono](https://github.com/badlogi
 
 - One process per client (no per-call shelling)
 - One obvious request shape (`PromptRequest`) for all user messages
-- Two explicit layers:
+- Layered architecture, tree mirrors runtime:
   - thin RPC mirror (typed methods, 1:1 with upstream commands)
-  - batteries (ergonomic helpers like `Run`, decoders, subscription policies)
+  - transport/process/runtime plumbing
+  - stream fanout/backpressure runtime
+  - batteries and typed decoders
 - Explicit failure semantics (`ErrProcessDied`, `ErrClientClosed`, `ErrRunInProgress`)
 - Strict contracts over silent fallbacks
+
+## Engineering principles encoded
+
+- Ontology-first naming: one canonical term per concept, no core synonyms.
+- User-mechanics-first: API behavior in 3 bullets, architecture follows those bullets.
+- KISS/YAGNI: thin RPC mirror + thin runtime wrappers + batteries only for ergonomics.
+- Discoverability-first: root façade + explicit implementation/runtime layers (`internal/sdk`, `internal/rpc`, `internal/transport`, `internal/stream`).
+- Agentic self-debug support: deterministic lifecycle/errors and hermetic e2e fake harness.
 
 ## Quick start
 
 ```go
 opts := pi.DefaultOneShotOptions()
+opts.Auth.Anthropic.APIKey = pi.Credential{File: "/run/agenix/anthropic-api-key"}
+opts.Environment = map[string]string{"PATH": os.Getenv("PATH")}
+
 client, err := pi.StartOneShot(opts)
 if err != nil {
     // handle
@@ -63,6 +76,37 @@ These stay close to upstream `docs/rpc.md` command contracts.
 - `Subscribe(SubscriptionPolicy)` (fanout/backpressure policy)
 - Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionStart`, `DecodeAutoCompactionEnd`, `DecodeAutoRetryStart`, `DecodeAutoRetryEnd`, `DecodeTerminalOutcome`)
 - `ShareSession(ctx)` (export + gist helper)
+
+## Package / file map (ontology-first)
+
+```text
+.
+├── client.go                 # public façade: constructors + client type exports
+├── types.go                  # public ontology exports
+├── errors.go                 # public error contracts
+├── mode.go                   # public mode/options exports
+├── command.go                # public command resolver export
+├── env.go                    # public env allowlist exports
+├── decode.go                 # public typed decoder exports
+└── internal/
+    ├── sdk/                  # canonical implementation package
+    │   ├── api_rpc.go        # thin RPC mirror methods
+    │   ├── rpc_contracts.go  # RPC command contracts + response decoding
+    │   ├── send.go           # request transport path
+    │   ├── process.go        # stdout/stderr/process lifecycle
+    │   ├── subscriptions.go  # subscription policy + stream adapters
+    │   ├── batteries_*.go    # convenience helpers
+    │   ├── decode.go         # typed event/terminal decoders
+    │   ├── tests/            # user-facing black-box/e2e tests
+    │   └── *_test.go         # white-box runtime invariants
+    ├── rpc/                  # private wire terms/constants
+    ├── transport/            # queue + pending request wrappers
+    ├── stream/               # generic fanout/backpressure hub
+    ├── runtime/              # generic primitives
+    └── testsupport/          # fake pi harness for e2e
+```
+
+This encodes: root package = stable API façade; `internal/sdk` = behavior implementation; lower internal packages = explicit plumbing layers.
 
 ## Intent map (ontology-first)
 
@@ -131,7 +175,34 @@ detailed, err := client.RunDetailed(ctx, pi.PromptRequest{Message: "Explain the 
 // detailed.AutoRetryStart / detailed.AutoRetryEnd
 ```
 
+## Environment + auth control (explicit)
+
+```go
+opts := pi.DefaultOneShotOptions() // defaults: InheritEnvironment=false, SeedAuthFromHome=true
+opts.InheritEnvironment = false    // explicit env only
+opts.SeedAuthFromHome = false      // optional: disable ~/.pi/agent auth seeding
+opts.Auth.Anthropic.APIKey = pi.Credential{File: "/run/agenix/anthropic-api-key"}
+opts.Environment = map[string]string{
+    "PATH": os.Getenv("PATH"), // explicitly pass what you want
+}
+
+// Optional: custom prompt for compaction summaries (manual + auto compaction).
+// Leave empty to use upstream default compaction behavior.
+opts.CompactionPrompt = "Summarize code changes, decisions, and next steps for handoff."
+
+client, err := pi.StartOneShot(opts)
+```
+
 ## Event subscription
+
+`Subscribe` is for callers that need live runtime events instead of only final
+`Run` output.
+
+Typical use-cases:
+- streaming chat UIs (react to `message_update` as text arrives),
+- audit/event logs (persist all event envelopes),
+- custom orchestrators (watch compaction/retry/process lifecycle events),
+- integrations that need raw event data for domain-specific parsing.
 
 There is one subscription API:
 
@@ -149,9 +220,9 @@ _ = events
 ```
 
 Backpressure modes:
-- `drop`
-- `block`
-- `ring`
+- `drop`: drop new event when buffer full (lowest latency, lossy)
+- `block`: wait for consumer (lossless, can stall producer path)
+- `ring`: keep latest events by dropping oldest when full (UI-friendly)
 
 Invalid policies fail with `ErrInvalidSubscriptionPolicy`.
 
@@ -203,6 +274,15 @@ if err == nil {
   - RPC methods require non-nil context (`ErrNilContext`).
   - If context has no deadline, a default 2m timeout is applied.
 - Thin mirror methods (`Prompt`, `Steer`, `FollowUp`, `Abort`, `GetState`, `NewSession`, `Compact`, `ExportHTML`) map 1:1 to upstream RPC commands.
+- Auth and environment are code-controlled via options:
+  - `Auth ProviderAuth` carries explicit provider credentials (value or file path per field).
+  - selected provider is presence-validated at startup (presence only, not credential validity).
+  - credential env vars cannot be injected through `Environment`; use `Auth` only.
+  - `Environment map[string]string` is for non-credential child env values (e.g. `PATH`).
+  - `InheritEnvironment` controls allowlisted host env inheritance (default: `false`).
+  - `SeedAuthFromHome` controls whether `~/.pi/agent/{auth.json,oauth.json}` are seeded into SDK agent dir (default: `true`).
+  - `CompactionPrompt` (optional) installs an SDK-managed extension hook for manual/auto compaction and passes the prompt via file-backed env vars.
+  - `PI_CODING_AGENT_DIR` is always set (explicit value wins; otherwise SDK-managed path).
 - `GetState` guarantees `SessionState.ContextWindow > 0` (fallback from model metadata when needed; protocol violation otherwise).
 - `Run` / `RunDetailed` are battery helpers:
   - single-flight per client (`ErrRunInProgress` on overlap)
@@ -218,7 +298,7 @@ if err == nil {
   - `Close()` deterministically unblocks pending requests with `ErrClientClosed`
 - Decoder strictness: RPC/event payloads must include explicit `type` values matching the expected envelope; missing/mismatched types fail fast.
 - Overflow note: upstream RPC does not currently expose a typed `context_exhausted` reason. SDK exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) plus typed compaction/retry events (`auto_compaction_*`, `auto_retry_*`) without provider-regex duplication.
-- Raw transport path is internal (`send` + `rpcCommand`/`rpcResponse` are not public API).
+- Raw transport path is internal (`send` + `internal/rpc.Command`/`internal/rpc.Response` are not public API).
 
 ## Modes
 
@@ -251,6 +331,39 @@ Runs:
 - `go test -race ./...`
 - `staticcheck ./...` (if installed)
 - smoke example (`go run ./examples/basic`)
+
+## Real pi integration tests
+
+These tests hit the actual `pi` binary (not fake harness scenarios).
+
+```bash
+PI_REAL=1 go test -tags=integration ./internal/sdk/tests -run TestRealPI -v
+```
+
+Release gate (mandatory real-pi run):
+
+```bash
+PI_REAL=1 ./scripts/check-release.sh
+```
+
+`check-release.sh` runs integration tests with `PI_REAL_REQUIRED=1`, so missing
+credentials or missing `pi` binary fail the gate.
+
+Prereqs:
+- `pi` on PATH
+- explicit credentials provided via env (`ANTHROPIC_API_KEY=...`, `ANTHROPIC_OAUTH_TOKEN=...`) or file-path env (`ANTHROPIC_API_KEY_FILE=/run/agenix/anthropic-api-key`)
+
+Local dev (recommended): explicitly export a real token from `~/.pi/agent/auth.json`, then run gate:
+
+```bash
+ANTHROPIC_OAUTH_TOKEN="$(python -c 'import json, pathlib; p=pathlib.Path("~/.pi/agent/auth.json").expanduser(); print(json.loads(p.read_text()).get("anthropic", {}).get("access", ""), end="")')" \
+PI_REAL=1 ./scripts/check-release.sh
+```
+
+No credential autodiscovery is performed by the SDK; reading from `~/.pi/agent/auth.json` is a manual test-run step only.
+
+Note: fake-harness e2e tests remain for deterministic fault injection
+(process death timing, late async failure ordering, backpressure races).
 
 ## Compatibility
 

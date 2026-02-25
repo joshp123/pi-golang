@@ -1,15 +1,20 @@
-# basic example AGENTS
+# examples/basic AGENTS
 
-## Purpose
-Smallest end-to-end demo for `StartOneShot` + `Run`.
+## What happens here (plain words)
+Minimal program that starts one-shot client, sends one prompt, prints assistant
+text.
 
-## What exists now
-- `main.go` with one prompt and stdout print.
+## User-facing effect
+Fast sanity check that local `pi` CLI + SDK wiring works end-to-end.
 
-## What is missing
-- Error classification demo (`*RPCError`, `ErrProcessDied`, `ErrClientClosed`).
+## Happy-path flow
+1. build default options,
+2. `StartOneShot`,
+3. `Run(context.Background(), PromptRequest{...})`,
+4. print text,
+5. close client.
 
-## Owned files
+## Files + ownership
 - `main.go`
 
 ## Canonical commands
