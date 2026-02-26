@@ -283,7 +283,7 @@ Canonical terminal outcome (`agent_end` payload):
 outcome, err := pi.DecodeTerminalOutcome(event.Raw)
 if err == nil {
     // outcome.Status: completed | failed | aborted
-    // outcome.Text, outcome.StopReason, outcome.ErrorMessage, outcome.Usage
+    // outcome.Text, outcome.StopReason, outcome.TerminalReason, outcome.ErrorMessage, outcome.Usage
 }
 ```
 
@@ -318,7 +318,7 @@ if err == nil {
   - closes all subscriber channels after that event
   - `Close()` deterministically unblocks pending requests with `ErrClientClosed`
 - Decoder strictness: RPC/event payloads must include explicit `type` values matching the expected envelope; missing/mismatched types fail fast.
-- Overflow note: upstream RPC does not currently expose a typed `context_exhausted` reason. SDK exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) plus typed compaction/retry events (`auto_compaction_*`, `auto_retry_*`) without provider-regex duplication.
+- Overflow note: upstream typed terminal reasons may be absent. SDK passes through optional `TerminalReason` when present and exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) plus typed compaction/retry events (`auto_compaction_*`, `auto_retry_*`) without provider-regex duplication.
 - Raw transport path is internal (`send` + `internal/rpc.Command`/`internal/rpc.Response` are not public API).
 
 ## Modes

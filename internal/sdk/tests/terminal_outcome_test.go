@@ -67,3 +67,37 @@ func TestDecodeTerminalOutcomeFailed(t *testing.T) {
 		t.Fatalf("expected error message, got %q", outcome.ErrorMessage)
 	}
 }
+
+func TestDecodeTerminalOutcomeTerminalReasonPassthrough(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type":"agent_end",
+		"messages":[
+			{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"error","terminalReason":"context_exhausted"}
+		]
+	}`)
+
+	outcome, err := sdk.DecodeTerminalOutcome(raw)
+	if err != nil {
+		t.Fatalf("DecodeTerminalOutcome returned error: %v", err)
+	}
+	if outcome.TerminalReason != sdk.TerminalReason("context_exhausted") {
+		t.Fatalf("expected terminal reason context_exhausted, got %q", outcome.TerminalReason)
+	}
+}
+
+func TestDecodeTerminalOutcomeTerminalReasonFallbackFields(t *testing.T) {
+	raw := json.RawMessage(`{
+		"type":"agent_end",
+		"messages":[
+			{"role":"assistant","content":[{"type":"text","text":""}],"stopReason":"error","terminal_reason":"overflow_context"}
+		]
+	}`)
+
+	outcome, err := sdk.DecodeTerminalOutcome(raw)
+	if err != nil {
+		t.Fatalf("DecodeTerminalOutcome returned error: %v", err)
+	}
+	if outcome.TerminalReason != sdk.TerminalReason("overflow_context") {
+		t.Fatalf("expected terminal reason overflow_context, got %q", outcome.TerminalReason)
+	}
+}

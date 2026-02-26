@@ -50,6 +50,8 @@ const (
 	TerminalStatusAborted   = sdk.TerminalStatusAborted
 )
 
+type TerminalReason = sdk.TerminalReason
+
 type TerminalOutcome = sdk.TerminalOutcome
 type RunDetailedResult = sdk.RunDetailedResult
 

@@ -165,15 +165,31 @@ func DecodeTerminalOutcome(raw json.RawMessage) (TerminalOutcome, error) {
 			return TerminalOutcome{}, err
 		}
 		return TerminalOutcome{
-			Status:       terminalStatus(message.StopReason, message.ErrorMessage),
-			Text:         text,
-			StopReason:   strings.TrimSpace(message.StopReason),
-			ErrorMessage: strings.TrimSpace(message.ErrorMessage),
-			Usage:        message.Usage,
+			Status:         terminalStatus(message.StopReason, message.ErrorMessage),
+			Text:           text,
+			StopReason:     strings.TrimSpace(message.StopReason),
+			TerminalReason: terminalReasonFromMessage(message),
+			ErrorMessage:   strings.TrimSpace(message.ErrorMessage),
+			Usage:          message.Usage,
 		}, nil
 	}
 
 	return TerminalOutcome{}, errors.New("assistant message not found in agent_end")
+}
+
+func terminalReasonFromMessage(message AgentMessage) TerminalReason {
+	candidates := []TerminalReason{
+		message.TerminalReason,
+		message.TerminalReasonAlt,
+	}
+
+	for _, candidate := range candidates {
+		trimmed := strings.TrimSpace(string(candidate))
+		if trimmed != "" {
+			return TerminalReason(trimmed)
+		}
+	}
+	return ""
 }
 
 func terminalStatus(stopReason string, errorMessage string) TerminalStatus {

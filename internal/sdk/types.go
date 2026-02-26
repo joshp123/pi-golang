@@ -84,12 +84,15 @@ const (
 	TerminalStatusAborted   TerminalStatus = "aborted"
 )
 
+type TerminalReason string
+
 type TerminalOutcome struct {
-	Status       TerminalStatus
-	Text         string
-	StopReason   string
-	ErrorMessage string
-	Usage        *Usage
+	Status         TerminalStatus
+	Text           string
+	StopReason     string
+	TerminalReason TerminalReason
+	ErrorMessage   string
+	Usage          *Usage
 }
 
 type RunDetailedResult struct {
@@ -171,11 +174,13 @@ type CompactResult struct {
 }
 
 type AgentMessage struct {
-	Role         string          `json:"role"`
-	Content      json.RawMessage `json:"content"`
-	Usage        *Usage          `json:"usage,omitempty"`
-	StopReason   string          `json:"stopReason,omitempty"`
-	ErrorMessage string          `json:"errorMessage,omitempty"`
+	Role              string          `json:"role"`
+	Content           json.RawMessage `json:"content"`
+	Usage             *Usage          `json:"usage,omitempty"`
+	StopReason        string          `json:"stopReason,omitempty"`
+	TerminalReason    TerminalReason  `json:"terminalReason,omitempty"`
+	TerminalReasonAlt TerminalReason  `json:"terminal_reason,omitempty"`
+	ErrorMessage      string          `json:"errorMessage,omitempty"`
 }
 
 type AgentEndEvent struct {

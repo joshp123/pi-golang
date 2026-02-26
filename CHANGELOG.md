@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add optional `TerminalReason` passthrough on `TerminalOutcome` for upstream typed terminal reason fields when present
+- Preserve strict non-heuristic behavior: no regex inference; empty `TerminalReason` when upstream omits reason details
+
 ## v0.0.14
 
 - Add pure managed-run classifiers in batteries layer:
