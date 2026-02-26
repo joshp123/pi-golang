@@ -29,6 +29,17 @@ type APIKeyAuth = sdk.APIKeyAuth
 type AnthropicAuth = sdk.AnthropicAuth
 type BedrockAuth = sdk.BedrockAuth
 type ProviderAuth = sdk.ProviderAuth
+
+type SkillsMode = sdk.SkillsMode
+
+const (
+	SkillsModeDisabled = sdk.SkillsModeDisabled
+	SkillsModeExplicit = sdk.SkillsModeExplicit
+	SkillsModeAmbient  = sdk.SkillsModeAmbient
+)
+
+type SkillsOptions = sdk.SkillsOptions
+
 type SessionOptions = sdk.SessionOptions
 type OneShotOptions = sdk.OneShotOptions
 

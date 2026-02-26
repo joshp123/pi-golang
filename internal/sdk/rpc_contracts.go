@@ -82,6 +82,31 @@ func exportHTMLCommand(outputPath string) rpc.Command {
 	return command
 }
 
+func getCommandsCommand() rpc.Command {
+	return rpc.Command{"type": rpc.CommandGetCommands}
+}
+
+type slashCommand struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Source      string `json:"source"`
+	Location    string `json:"location"`
+	Path        string `json:"path"`
+}
+
+func decodeCommands(data json.RawMessage) ([]slashCommand, error) {
+	if len(data) == 0 || string(data) == "null" {
+		return nil, fmt.Errorf("%w: get_commands missing response data", ErrProtocolViolation)
+	}
+	var payload struct {
+		Commands []slashCommand `json:"commands"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	return payload.Commands, nil
+}
+
 func decodeSessionState(data json.RawMessage) (SessionState, error) {
 	var state SessionState
 	if err := json.Unmarshal(data, &state); err != nil {

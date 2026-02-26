@@ -79,6 +79,18 @@ type ShareResult = sdk.ShareResult
 type ModelInfo = sdk.ModelInfo
 type SessionState = sdk.SessionState
 type CompactResult = sdk.CompactResult
+
+type SkillLocation = sdk.SkillLocation
+
+const (
+	SkillLocationUser    = sdk.SkillLocationUser
+	SkillLocationProject = sdk.SkillLocationProject
+	SkillLocationPath    = sdk.SkillLocationPath
+	SkillLocationUnknown = sdk.SkillLocationUnknown
+)
+
+type LoadedSkill = sdk.LoadedSkill
+
 type AgentMessage = sdk.AgentMessage
 type AgentEndEvent = sdk.AgentEndEvent
 type AssistantMessageDelta = sdk.AssistantMessageDelta

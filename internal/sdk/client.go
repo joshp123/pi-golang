@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -18,6 +19,7 @@ import (
 )
 
 var defaultShutdownTimeout = 2 * time.Second
+var startupSkillVerificationTimeout = 5 * time.Second
 
 var debugEnabledProvider = func() bool {
 	return os.Getenv("PI_DEBUG") == "1"
@@ -85,6 +87,7 @@ type startConfig struct {
 	environment        map[string]string
 	inheritEnvironment bool
 	seedAuthFromHome   bool
+	skills             SkillsOptions
 	compactionPrompt   string
 	useSession         bool
 }
@@ -105,6 +108,7 @@ func StartSession(options SessionOptions) (*SessionClient, error) {
 		environment:        normalized.Environment,
 		inheritEnvironment: normalized.InheritEnvironment,
 		seedAuthFromHome:   normalized.SeedAuthFromHome,
+		skills:             normalized.Skills,
 		compactionPrompt:   normalized.CompactionPrompt,
 		useSession:         true,
 	})
@@ -129,6 +133,7 @@ func StartOneShot(options OneShotOptions) (*OneShotClient, error) {
 		environment:        normalized.Environment,
 		inheritEnvironment: normalized.InheritEnvironment,
 		seedAuthFromHome:   normalized.SeedAuthFromHome,
+		skills:             normalized.Skills,
 		compactionPrompt:   normalized.CompactionPrompt,
 		useSession:         false,
 	})
@@ -189,6 +194,19 @@ func startClient(config startConfig) (client *Client, err error) {
 	} else {
 		args = append(args, "--no-session")
 	}
+
+	switch config.skills.Mode {
+	case "", SkillsModeDisabled:
+		args = append(args, "--no-skills")
+	case SkillsModeExplicit:
+		args = append(args, "--no-skills")
+		for _, path := range config.skills.Paths {
+			args = append(args, "--skill", path)
+		}
+	case SkillsModeAmbient:
+		// Ambient discovery enabled; no skill flags.
+	}
+
 	if strings.TrimSpace(config.systemPrompt) != "" {
 		args = append(args, "--system-prompt", config.systemPrompt)
 	}
@@ -232,6 +250,15 @@ func startClient(config startConfig) (client *Client, err error) {
 	go client.dispatchEvents()
 	go client.readStdout(stdout)
 	go client.waitForProcess()
+
+	if config.skills.Mode == SkillsModeExplicit {
+		verifyCtx, cancel := context.WithTimeout(context.Background(), startupSkillVerificationTimeout)
+		defer cancel()
+		if verifyErr := client.verifyLoadedSkills(verifyCtx, config.skills.Paths); verifyErr != nil {
+			_ = client.Close()
+			return nil, verifyErr
+		}
+	}
 
 	return client, nil
 }

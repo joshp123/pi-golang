@@ -173,6 +173,22 @@ type CompactResult struct {
 	Details          json.RawMessage `json:"details,omitempty"`
 }
 
+type SkillLocation string
+
+const (
+	SkillLocationUser    SkillLocation = "user"
+	SkillLocationProject SkillLocation = "project"
+	SkillLocationPath    SkillLocation = "path"
+	SkillLocationUnknown SkillLocation = "unknown"
+)
+
+type LoadedSkill struct {
+	Name        string
+	Description string
+	Path        string
+	Location    SkillLocation
+}
+
 type AgentMessage struct {
 	Role              string          `json:"role"`
 	Content           json.RawMessage `json:"content"`

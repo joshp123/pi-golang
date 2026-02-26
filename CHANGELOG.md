@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## v0.0.16
+
+- Add explicit skills control to `SessionOptions` / `OneShotOptions` via `Skills SkillsOptions`:
+  - `disabled` (default): pass `--no-skills`
+  - `explicit`: pass `--no-skills` + repeated `--skill <path>`
+  - `ambient`: opt into upstream ambient skill discovery
+- Add startup verification for `SkillsModeExplicit`: call upstream `get_commands`, filter `skill:*`, fail fast on path drift
+- Add `ListLoadedSkills(ctx)` public method (skills-only view over upstream `get_commands`)
+
+## v0.0.15
+
 - Add optional `TerminalReason` passthrough on `TerminalOutcome` for upstream typed terminal reason fields when present
 - Preserve strict non-heuristic behavior: no regex inference; empty `TerminalReason` when upstream omits reason details
 

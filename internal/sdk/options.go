@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -69,6 +71,19 @@ type ProviderAuth struct {
 	Bedrock    BedrockAuth
 }
 
+type SkillsMode string
+
+const (
+	SkillsModeDisabled SkillsMode = "disabled"
+	SkillsModeExplicit SkillsMode = "explicit"
+	SkillsModeAmbient  SkillsMode = "ambient"
+)
+
+type SkillsOptions struct {
+	Mode  SkillsMode
+	Paths []string
+}
+
 type SessionOptions struct {
 	AppName            string
 	WorkDir            string
@@ -80,6 +95,7 @@ type SessionOptions struct {
 	Environment        map[string]string
 	InheritEnvironment bool
 	SeedAuthFromHome   bool
+	Skills             SkillsOptions
 	CompactionPrompt   string
 }
 
@@ -93,15 +109,26 @@ type OneShotOptions struct {
 	Environment        map[string]string
 	InheritEnvironment bool
 	SeedAuthFromHome   bool
+	Skills             SkillsOptions
 	CompactionPrompt   string
 }
 
 func DefaultSessionOptions() SessionOptions {
-	return SessionOptions{Mode: ModeSmart, InheritEnvironment: false, SeedAuthFromHome: true}
+	return SessionOptions{
+		Mode:               ModeSmart,
+		InheritEnvironment: false,
+		SeedAuthFromHome:   true,
+		Skills:             SkillsOptions{Mode: SkillsModeDisabled},
+	}
 }
 
 func DefaultOneShotOptions() OneShotOptions {
-	return OneShotOptions{Mode: ModeSmart, InheritEnvironment: false, SeedAuthFromHome: true}
+	return OneShotOptions{
+		Mode:               ModeSmart,
+		InheritEnvironment: false,
+		SeedAuthFromHome:   true,
+		Skills:             SkillsOptions{Mode: SkillsModeDisabled},
+	}
 }
 
 func normalizeSessionOptions(options SessionOptions) (SessionOptions, error) {
@@ -115,9 +142,15 @@ func normalizeSessionOptions(options SessionOptions) (SessionOptions, error) {
 		return options, err
 	}
 	options.Dragons = trimDragons(options.Dragons)
+	options.WorkDir = strings.TrimSpace(options.WorkDir)
 	options.SessionName = strings.TrimSpace(options.SessionName)
 	options.Auth = trimProviderAuth(options.Auth)
 	options.Environment = cloneStringMap(options.Environment)
+	normalizedSkills, err := normalizeSkillsOptions(options.Skills, options.WorkDir)
+	if err != nil {
+		return options, err
+	}
+	options.Skills = normalizedSkills
 	return options, nil
 }
 
@@ -132,9 +165,112 @@ func normalizeOneShotOptions(options OneShotOptions) (OneShotOptions, error) {
 		return options, err
 	}
 	options.Dragons = trimDragons(options.Dragons)
+	options.WorkDir = strings.TrimSpace(options.WorkDir)
 	options.Auth = trimProviderAuth(options.Auth)
 	options.Environment = cloneStringMap(options.Environment)
+	normalizedSkills, err := normalizeSkillsOptions(options.Skills, options.WorkDir)
+	if err != nil {
+		return options, err
+	}
+	options.Skills = normalizedSkills
 	return options, nil
+}
+
+func normalizeSkillsOptions(options SkillsOptions, workDir string) (SkillsOptions, error) {
+	options.Mode = SkillsMode(strings.TrimSpace(string(options.Mode)))
+	if options.Mode == "" {
+		options.Mode = SkillsModeDisabled
+	}
+
+	paths := make([]string, 0, len(options.Paths))
+	for _, path := range options.Paths {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			continue
+		}
+		paths = append(paths, trimmed)
+	}
+
+	switch options.Mode {
+	case SkillsModeDisabled:
+		if len(paths) > 0 {
+			return options, fmt.Errorf("skills paths require mode %q", SkillsModeExplicit)
+		}
+		options.Paths = nil
+		return options, nil
+	case SkillsModeAmbient:
+		if len(paths) > 0 {
+			return options, fmt.Errorf("skills paths are not allowed in mode %q", SkillsModeAmbient)
+		}
+		options.Paths = nil
+		return options, nil
+	case SkillsModeExplicit:
+		if len(paths) == 0 {
+			return options, fmt.Errorf("at least one skill path is required in mode %q", SkillsModeExplicit)
+		}
+		baseDir, err := skillsBaseDir(workDir)
+		if err != nil {
+			return options, err
+		}
+		resolvedPaths := make([]string, 0, len(paths))
+		seen := make(map[string]struct{}, len(paths))
+		for _, path := range paths {
+			resolvedPath := resolveSkillPath(path, baseDir)
+			if _, exists := seen[resolvedPath]; exists {
+				continue
+			}
+			info, err := os.Stat(resolvedPath)
+			if err != nil {
+				return options, fmt.Errorf("skill path %q: %w", path, err)
+			}
+			if !info.IsDir() && !strings.HasSuffix(resolvedPath, ".md") {
+				return options, fmt.Errorf("skill path %q must be a directory or .md file", path)
+			}
+			resolvedPaths = append(resolvedPaths, resolvedPath)
+			seen[resolvedPath] = struct{}{}
+		}
+		if len(resolvedPaths) == 0 {
+			return options, fmt.Errorf("at least one skill path is required in mode %q", SkillsModeExplicit)
+		}
+		options.Paths = resolvedPaths
+		return options, nil
+	default:
+		return options, fmt.Errorf("invalid skills mode %q", options.Mode)
+	}
+}
+
+func skillsBaseDir(workDir string) (string, error) {
+	trimmedWorkDir := strings.TrimSpace(workDir)
+	if trimmedWorkDir == "" {
+		return os.Getwd()
+	}
+	if filepath.IsAbs(trimmedWorkDir) {
+		return filepath.Clean(trimmedWorkDir), nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(filepath.Join(cwd, trimmedWorkDir)), nil
+}
+
+func resolveSkillPath(path string, baseDir string) string {
+	expanded := path
+	home, err := os.UserHomeDir()
+	if err == nil {
+		switch {
+		case expanded == "~":
+			expanded = home
+		case strings.HasPrefix(expanded, "~/"):
+			expanded = filepath.Join(home, expanded[2:])
+		case strings.HasPrefix(expanded, "~"):
+			expanded = filepath.Join(home, expanded[1:])
+		}
+	}
+	if filepath.IsAbs(expanded) {
+		return filepath.Clean(expanded)
+	}
+	return filepath.Clean(filepath.Join(baseDir, expanded))
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

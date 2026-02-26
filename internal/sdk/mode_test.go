@@ -85,6 +85,12 @@ func TestDefaultOptionsEnvironmentPolicy(t *testing.T) {
 	if !session.SeedAuthFromHome {
 		t.Fatal("default session options should seed auth from ~/.pi/agent")
 	}
+	if oneShot.Skills.Mode != SkillsModeDisabled {
+		t.Fatalf("default one-shot options should disable ambient skills, got %q", oneShot.Skills.Mode)
+	}
+	if session.Skills.Mode != SkillsModeDisabled {
+		t.Fatalf("default session options should disable ambient skills, got %q", session.Skills.Mode)
+	}
 }
 
 func assertConfig(t *testing.T, cfg modelConfig, provider string, model string, thinking string) {

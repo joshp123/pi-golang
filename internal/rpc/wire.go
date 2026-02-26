@@ -16,14 +16,15 @@ type Response struct {
 }
 
 const (
-	CommandPrompt     = "prompt"
-	CommandSteer      = "steer"
-	CommandFollowUp   = "follow_up"
-	CommandAbort      = "abort"
-	CommandGetState   = "get_state"
-	CommandNewSession = "new_session"
-	CommandCompact    = "compact"
-	CommandExportHTML = "export_html"
+	CommandPrompt      = "prompt"
+	CommandSteer       = "steer"
+	CommandFollowUp    = "follow_up"
+	CommandAbort       = "abort"
+	CommandGetState    = "get_state"
+	CommandNewSession  = "new_session"
+	CommandCompact     = "compact"
+	CommandExportHTML  = "export_html"
+	CommandGetCommands = "get_commands"
 )
 
 const (

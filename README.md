@@ -66,6 +66,7 @@ The internal architecture follows this behavior directly: thin RPC mirror for co
 - `GetState(ctx)`
 - `NewSession(ctx, parentSession)`
 - `Compact(ctx, instructions)`
+- `ListLoadedSkills(ctx)` (filters upstream `get_commands` to skills only)
 - `ExportHTML(ctx, outputPath)` (session client)
 
 These stay close to upstream `docs/rpc.md` command contracts.
@@ -197,12 +198,17 @@ if runErr != nil {
 ## Environment + auth control (explicit)
 
 ```go
-opts := pi.DefaultOneShotOptions() // defaults: InheritEnvironment=false, SeedAuthFromHome=true
+opts := pi.DefaultOneShotOptions() // defaults: InheritEnvironment=false, SeedAuthFromHome=true, Skills.Mode=disabled
 opts.InheritEnvironment = false    // explicit env only
 opts.SeedAuthFromHome = false      // optional: disable ~/.pi/agent auth seeding
 opts.Auth.Anthropic.APIKey = pi.Credential{File: "/run/agenix/anthropic-api-key"}
 opts.Environment = map[string]string{
     "PATH": os.Getenv("PATH"), // explicitly pass what you want
+}
+// Optional: deterministic skills allowlist.
+opts.Skills = pi.SkillsOptions{
+    Mode:  pi.SkillsModeExplicit,
+    Paths: []string{"/absolute/path/to/skills"},
 }
 
 // Optional: custom prompt for compaction summaries (manual + auto compaction).
@@ -251,11 +257,13 @@ Invalid policies fail with `ErrInvalidSubscriptionPolicy`.
 state, err := client.GetState(ctx)
 cancelled, err := client.NewSession(ctx, "")
 compacted, err := client.Compact(ctx, "Focus on code changes")
+skills, err := client.ListLoadedSkills(ctx)
 err = client.Abort(ctx)
 
 _ = state
 _ = cancelled
 _ = compacted
+_ = skills
 ```
 
 ## Typed event decoders
@@ -300,6 +308,10 @@ if err == nil {
   - `Environment map[string]string` is for non-credential child env values (e.g. `PATH`).
   - `InheritEnvironment` controls allowlisted host env inheritance (default: `false`).
   - `SeedAuthFromHome` controls whether `~/.pi/agent/{auth.json,oauth.json}` are seeded into SDK agent dir (default: `true`).
+  - `Skills SkillsOptions` controls skill loading explicitly:
+    - `disabled` (default): pass `--no-skills` and load no ambient skills.
+    - `explicit`: pass `--no-skills` + repeated `--skill <path>`; paths are normalized/validated.
+    - `ambient`: opt into upstream ambient discovery/settings/package skill loading.
   - `CompactionPrompt` (optional) installs an SDK-managed extension hook for manual/auto compaction and passes the prompt via file-backed env vars.
   - `PI_CODING_AGENT_DIR` is always set (explicit value wins; otherwise SDK-managed path).
 - `GetState` guarantees `SessionState.ContextWindow > 0` (fallback from model metadata when needed; protocol violation otherwise).
@@ -318,6 +330,7 @@ if err == nil {
   - closes all subscriber channels after that event
   - `Close()` deterministically unblocks pending requests with `ErrClientClosed`
 - Decoder strictness: RPC/event payloads must include explicit `type` values matching the expected envelope; missing/mismatched types fail fast.
+- Explicit skills mode startup verification: SDK calls upstream `get_commands`, filters `skill:*`, and fails startup if loaded skill paths drift outside configured explicit paths.
 - Overflow note: upstream typed terminal reasons may be absent. SDK passes through optional `TerminalReason` when present and exposes canonical terminal fields (`Status`, `StopReason`, `ErrorMessage`) plus typed compaction/retry events (`auto_compaction_*`, `auto_retry_*`) without provider-regex duplication.
 - Raw transport path is internal (`send` + `internal/rpc.Command`/`internal/rpc.Response` are not public API).
 

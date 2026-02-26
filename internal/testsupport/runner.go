@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	commandPrompt     = "prompt"
-	commandAbort      = "abort"
-	commandGetState   = "get_state"
-	commandNewSession = "new_session"
-	commandCompact    = "compact"
+	commandPrompt      = "prompt"
+	commandAbort       = "abort"
+	commandGetState    = "get_state"
+	commandNewSession  = "new_session"
+	commandCompact     = "compact"
+	commandGetCommands = "get_commands"
 
 	eventTypeResponse            = "response"
 	eventTypeAgentEnd            = "agent_end"
@@ -23,13 +24,14 @@ const (
 	eventTypeAutoRetryEnd        = "auto_retry_end"
 )
 
-func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
+func RunScenario(scenario string, processArgs []string, stdin io.Reader, stdout io.Writer) error {
 	scanner := bufio.NewScanner(stdin)
 	writer := bufio.NewWriter(stdout)
 	defer writer.Flush()
 
 	abortRun := abortRunState{}
 	runCancelAbort := runCancelAbortState{}
+	skillPaths := collectFlagValues(processArgs, "--skill")
 
 	for scanner.Scan() {
 		var command map[string]any
@@ -40,6 +42,32 @@ func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
 		commandType, _ := command["type"].(string)
 		requestID, _ := command["id"].(string)
 
+		if commandType == commandGetCommands {
+			commands := make([]map[string]any, 0, len(skillPaths))
+			for index, path := range skillPaths {
+				commands = append(commands, map[string]any{
+					"name":        fmt.Sprintf("skill:test-%d", index+1),
+					"description": "test skill",
+					"source":      "skill",
+					"location":    "path",
+					"path":        path,
+				})
+			}
+			if scenario == "skills_unexpected" {
+				commands = append(commands, map[string]any{
+					"name":        "skill:ambient",
+					"description": "ambient skill",
+					"source":      "skill",
+					"location":    "user",
+					"path":        "/unexpected/ambient/SKILL.md",
+				})
+			}
+			if err := writeResponse(writer, requestID, commandType, true, map[string]any{"commands": commands}, ""); err != nil {
+				return err
+			}
+			continue
+		}
+
 		switch scenario {
 		case "die_on_prompt":
 			if commandType == commandPrompt {
@@ -48,7 +76,7 @@ func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
 			if err := writeResponse(writer, requestID, commandType, true, map[string]any{}, ""); err != nil {
 				return err
 			}
-		case "happy":
+		case "happy", "skills_unexpected":
 			if err := handleHappyScenario(writer, requestID, commandType, command); err != nil {
 				return err
 			}
@@ -84,4 +112,16 @@ func RunScenario(scenario string, stdin io.Reader, stdout io.Writer) error {
 	}
 
 	return scanner.Err()
+}
+
+func collectFlagValues(args []string, flag string) []string {
+	values := make([]string, 0)
+	for index := 0; index < len(args)-1; index++ {
+		if args[index] != flag {
+			continue
+		}
+		values = append(values, args[index+1])
+		index++
+	}
+	return values
 }
