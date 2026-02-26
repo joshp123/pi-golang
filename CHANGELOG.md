@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.0.14
+
+- Add pure managed-run classifiers in batteries layer:
+  - `ClassifyManaged(RunDetailedResult) -> ManagedSummary`
+  - `ClassifyRunError(error) -> (BrokenCause, bool)`
+- Add stable managed completion classes (`ok`, `ok_after_recovery`, `aborted`, `failed`)
+- Add typed recovery facts (`CompactionObserved`, `OverflowDetected`, `Recovered`) without regex heuristics
+- Keep orchestration unchanged (`Run`/`RunDetailed` remain the execution path)
+
 ## v0.0.13
 
 - Add generic `CompactionPrompt` option to `SessionOptions` and `OneShotOptions`

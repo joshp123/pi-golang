@@ -100,6 +100,34 @@ type RunDetailedResult struct {
 	AutoRetryEnd        *AutoRetryEndEvent
 }
 
+type CompletionClass string
+
+const (
+	CompletionClassOK              CompletionClass = "ok"
+	CompletionClassOKAfterRecovery CompletionClass = "ok_after_recovery"
+	CompletionClassAborted         CompletionClass = "aborted"
+	CompletionClassFailed          CompletionClass = "failed"
+)
+
+type RecoveryFacts struct {
+	CompactionObserved bool
+	OverflowDetected   bool
+	Recovered          bool
+}
+
+type ManagedSummary struct {
+	Class CompletionClass
+	Facts RecoveryFacts
+}
+
+type BrokenCause string
+
+const (
+	BrokenCauseProcessDied BrokenCause = "process_died"
+	BrokenCauseProtocol    BrokenCause = "protocol_violation"
+	BrokenCauseClient      BrokenCause = "client_runtime"
+)
+
 type ShareResult struct {
 	GistURL    string
 	GistID     string

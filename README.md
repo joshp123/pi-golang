@@ -75,6 +75,7 @@ These stay close to upstream `docs/rpc.md` command contracts.
 - `Run(ctx, PromptRequest)` (sync helper waiting for `agent_end`)
 - `Subscribe(SubscriptionPolicy)` (fanout/backpressure policy)
 - Typed event decoders (`DecodeAgentEnd`, `DecodeMessageUpdate`, `DecodeAutoCompactionStart`, `DecodeAutoCompactionEnd`, `DecodeAutoRetryStart`, `DecodeAutoRetryEnd`, `DecodeTerminalOutcome`)
+- Pure managed classifiers (`ClassifyManaged`, `ClassifyRunError`)
 - `ShareSession(ctx)` (export + gist helper)
 
 ## Package / file map (ontology-first)
@@ -88,6 +89,7 @@ These stay close to upstream `docs/rpc.md` command contracts.
 ├── command.go                # public command resolver export
 ├── env.go                    # public env allowlist exports
 ├── decode.go                 # public typed decoder exports
+├── managed.go                # public batteries classifiers exports
 └── internal/
     ├── sdk/                  # canonical implementation package
     │   ├── api_rpc.go        # thin RPC mirror methods
@@ -116,6 +118,7 @@ This encodes: root package = stable API façade; `internal/sdk` = behavior imple
 - Inspect runtime/session: `GetState`, `Stderr`
 - Compact/session mgmt: `Compact`, `NewSession`, `ExportHTML`, `ShareSession`
 - Observe stream: `Subscribe` + typed event decoders
+- Classify managed outcomes: `ClassifyManaged`, `ClassifyRunError`
 - Lifecycle: `Close`
 
 ## One way to send messages
@@ -173,6 +176,22 @@ detailed, err := client.RunDetailed(ctx, pi.PromptRequest{Message: "Explain the 
 // detailed.Outcome
 // detailed.AutoCompactionStart / detailed.AutoCompactionEnd
 // detailed.AutoRetryStart / detailed.AutoRetryEnd
+```
+
+### Managed classification helpers (pure functions)
+
+```go
+summary := pi.ClassifyManaged(detailed)
+// summary.Class: ok | ok_after_recovery | aborted | failed
+// summary.Facts.CompactionObserved
+// summary.Facts.OverflowDetected
+// summary.Facts.Recovered
+
+if runErr != nil {
+    cause, broken := pi.ClassifyRunError(runErr)
+    _ = cause
+    _ = broken
+}
 ```
 
 ## Environment + auth control (explicit)
@@ -290,6 +309,8 @@ if err == nil {
   - on context cancellation while waiting, send best-effort `Abort` and return `ctx.Err()`
   - surface late async `prompt` failures (`response` frames) as `*RPCError`
 - `RunDetailed` additionally returns typed compaction/retry signals from streamed events.
+- `ClassifyManaged(RunDetailedResult)` is a pure classifier over typed run signals (`ok | ok_after_recovery | aborted | failed`) with no provider regex inference.
+- `ClassifyRunError(error)` is a pure classifier for runtime/process breakage (`process_died`, `protocol_violation`, `client_runtime`) and keeps cancellation non-broken.
 - `Abort(ctx)` sends upstream `{"type":"abort"}` and waits for command response.
 - Process/lifecycle guarantees:
   - unexpected process exit fails pending requests with `ErrProcessDied`

@@ -52,6 +52,27 @@ const (
 
 type TerminalOutcome = sdk.TerminalOutcome
 type RunDetailedResult = sdk.RunDetailedResult
+
+type CompletionClass = sdk.CompletionClass
+
+const (
+	CompletionClassOK              = sdk.CompletionClassOK
+	CompletionClassOKAfterRecovery = sdk.CompletionClassOKAfterRecovery
+	CompletionClassAborted         = sdk.CompletionClassAborted
+	CompletionClassFailed          = sdk.CompletionClassFailed
+)
+
+type RecoveryFacts = sdk.RecoveryFacts
+type ManagedSummary = sdk.ManagedSummary
+
+type BrokenCause = sdk.BrokenCause
+
+const (
+	BrokenCauseProcessDied = sdk.BrokenCauseProcessDied
+	BrokenCauseProtocol    = sdk.BrokenCauseProtocol
+	BrokenCauseClient      = sdk.BrokenCauseClient
+)
+
 type ShareResult = sdk.ShareResult
 type ModelInfo = sdk.ModelInfo
 type SessionState = sdk.SessionState
